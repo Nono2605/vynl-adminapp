@@ -9,6 +9,7 @@ const VARIANTS: Record<string, string> = {
   approved: "status--ok",
   paid: "status--ok",
   paying: "status--ok",
+  playing: "status--ok",
   // à traiter
   in_review: "status--warn",
   trialing: "status--warn",
@@ -34,6 +35,7 @@ const VARIANTS: Record<string, string> = {
   listener: "status--idle",
   free: "status--idle",
   open: "status--idle",
+  too_short: "status--idle",
   // terminé
   archived: "status--soon",
   canceled: "status--soon",

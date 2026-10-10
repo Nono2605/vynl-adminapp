@@ -16,3 +16,8 @@ export function hoursAgo(hours: number): Date {
 export function daysAgo(days: number): Date {
   return new Date(Date.now() - days * DAY_MS);
 }
+
+// Il y a `seconds` secondes.
+export function secondsAgo(seconds: number): Date {
+  return new Date(Date.now() - seconds * 1000);
+}

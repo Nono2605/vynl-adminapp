@@ -9,10 +9,22 @@ import { formatDay, formatDateTime, formatDuration, formatNumber } from "@/lib/f
 import { first, oneOf, pageRange, parsePage, pick, type SearchParams } from "@/lib/query";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { daysAgo, hoursAgo, startOfUtcDay } from "@/lib/time";
+import { daysAgo, hoursAgo, secondsAgo, startOfUtcDay } from "@/lib/time";
 
 const SHOW = ["qualified", "excluded"] as const;
 const CHART_DAYS = 14;
+// Le lecteur envoie un battement toutes les ~15 s : sans nouvelles depuis 2 min, la
+// page est partie même si la lecture n'a pas encore été close par le serveur.
+const LIVE_WINDOW_SECONDS = 120;
+
+// Ce qu'on dit d'une écoute. « open » n'est pas un résultat : une écoute retenue
+// qui n'a pas atteint le seuil est « too short », une écoute en cours « playing ».
+function playResult(play: PlayRow, liveSince: Date): { status: string; note: string } {
+  if (!play.counted) return { status: "rejected", note: play.excluded_reason ?? "excluded" };
+  if (play.qualified) return { status: "approved", note: "qualified" };
+  const live = !play.ended_at && new Date(play.last_heartbeat_at) > liveSince;
+  return live ? { status: "playing", note: "not qualified yet" } : { status: "too_short", note: "not qualified" };
+}
 
 interface PlayRow {
   id: string;
@@ -23,6 +35,8 @@ interface PlayRow {
   qualified: boolean;
   counted: boolean;
   excluded_reason: string | null;
+  ended_at: string | null;
+  last_heartbeat_at: string;
   entitlement: string;
   device_type: string | null;
   country_code: string | null;
@@ -78,7 +92,7 @@ export default async function PlaysPage({ searchParams }: { searchParams: Promis
   let listQuery = db
     .from("plays")
     .select(
-      "id, user_id, started_at, validated_seconds, track_duration_seconds, qualified, counted, excluded_reason, entitlement, device_type, country_code, tracks(title), artists(name), users(email)",
+      "id, user_id, started_at, validated_seconds, track_duration_seconds, qualified, counted, excluded_reason, ended_at, last_heartbeat_at, entitlement, device_type, country_code, tracks(title), artists(name), users(email)",
       { count: "exact" }
     )
     .order("started_at", { ascending: false })
@@ -109,6 +123,7 @@ export default async function PlaysPage({ searchParams }: { searchParams: Promis
   const max = Math.max(...series.map((day) => day.counted), 1);
 
   const rows = (list.data ?? []) as unknown as PlayRow[];
+  const liveSince = secondsAgo(LIVE_WINDOW_SECONDS);
 
   return (
     <>
@@ -185,6 +200,7 @@ export default async function PlaysPage({ searchParams }: { searchParams: Promis
             )}
             {rows.map((play) => {
               const email = first(play.users)?.email;
+              const result = playResult(play, liveSince);
               return (
                 <tr key={play.id}>
                   <td>
@@ -209,14 +225,7 @@ export default async function PlaysPage({ searchParams }: { searchParams: Promis
                   </td>
                   <td>{play.entitlement}</td>
                   <td>
-                    {play.counted ? (
-                      <StatusBadge status={play.qualified ? "approved" : "open"} />
-                    ) : (
-                      <StatusBadge status="rejected" />
-                    )}{" "}
-                    <span className="muted">
-                      {play.counted ? (play.qualified ? "qualified" : "counted") : (play.excluded_reason ?? "excluded")}
-                    </span>
+                    <StatusBadge status={result.status} /> <span className="muted">{result.note}</span>
                   </td>
                   <td>{play.country_code ?? "—"}</td>
                   <td>{play.device_type ?? "—"}</td>
