@@ -1,0 +1,807 @@
+/* Direction artistique Vynl (6 oct. 2026) — « studio d'écoute nocturne ».
+   80 % sombre, 15 % bleu, 5 % cyan : le cyan est rare, il marque ce qui est
+   actif (page courante, focus, série d'un graphique). Une seule lueur forte
+   par écran. Mode sombre uniquement pour l'instant (le mode clair de la DA
+   n'est pas encore décliné).
+   Les tokens sont ceux de l'app auditeur (Vynl-App) et du Creator Studio :
+   même palette, mêmes noms. Si la DA change, changer les trois fichiers. */
+:root {
+  /* Palette */
+  --vynl-nuit: #050816;
+  --vynl-abysse: #0b1130;
+  --vynl-vinyle: #17204f;
+  --vynl-survol: #1f2a63;
+  --vynl-sillon: #32428c;
+  --vynl-bleu: #0059f9;
+  --vynl-bleu-profond: #001cb2;
+  --vynl-cyan: #19e3ff;
+  --vynl-reflet: #90bfe9;
+
+  /* Texte : 3 niveaux */
+  --vynl-texte: #ffffff;
+  --vynl-texte-2: #a9b4d6;
+  --vynl-texte-3: #6b77a6;
+
+  /* États */
+  --vynl-succes: #2ee6a6;
+  --vynl-alerte: #ffb547;
+  --vynl-erreur: #ff4d6d;
+
+  /* Bordure fine (Sillon à 40 %) et voile sombre */
+  --vynl-bordure: rgba(50, 66, 140, 0.4);
+  --vynl-voile: rgba(5, 8, 22, 0.7);
+
+  /* Dégradés, lueurs, verre */
+  --vynl-degrade-vague: linear-gradient(180deg, #19e3ff 0%, #0059f9 55%, #001cb2 100%);
+  --vynl-degrade-label: linear-gradient(135deg, #19e3ff, #0059f9);
+  --vynl-degrade-nuit: linear-gradient(180deg, #0b1130, #050816);
+  --vynl-lueur: 0 0 40px rgba(0, 89, 249, 0.45);
+  --vynl-lueur-cyan: 0 0 16px rgba(25, 227, 255, 0.6);
+  --vynl-verre: rgba(11, 17, 48, 0.7);
+  --vynl-flou-verre: blur(20px);
+
+  /* Pochette / avatar sans image : un vinyle (label bleu + sillons). */
+  --vynl-pochette-vide:
+    radial-gradient(circle at 50% 50%, #0059f9 0 13%, #050816 13.5% 15%, transparent 15.5%),
+    repeating-radial-gradient(circle at 50% 50%, rgba(50, 66, 140, 0.4) 0 1px, transparent 1px 7px),
+    linear-gradient(180deg, #17204f, #0b1130);
+  /* Bannière sans image : une nappe de lumière bleue sur fond nuit. */
+  --vynl-banniere-vide:
+    radial-gradient(60% 120% at 50% 0%, rgba(0, 89, 249, 0.45), transparent 70%),
+    linear-gradient(180deg, #0b1130, #050816);
+
+  /* Formes */
+  --vynl-rayon-carte: 16px;
+  --vynl-rayon-champ: 12px;
+  --radius-sm: 12px;
+  --radius-md: var(--vynl-rayon-carte);
+  --radius-lg: 20px;
+  --shadow-card: 0 8px 30px rgba(0, 0, 0, 0.35);
+
+  /* Typographie : Dela Gothic One pour la marque et les grands titres
+     d'impact (jamais sous 24 px, jamais sur du texte saisi par les
+     utilisateurs : noms d'artistes, titres), Sora pour tout le reste. Les
+     variables --font-* sont posées sur <html> par next/font (layout.tsx). */
+  --vynl-police-marque: var(--font-dela-gothic), "Dela Gothic One", sans-serif;
+  --vynl-police-texte: var(--font-sora), "Sora", system-ui, sans-serif;
+
+  /* Espacements (grille de 8 px) */
+  --content-max-width: 1280px;
+  --sidebar-width: 248px;
+  --bottom-nav-height: 64px;
+  --space-xs: 0.5rem;
+  --space-sm: 1rem;
+  --space-md: 1.5rem;
+  --space-lg: 2.5rem;
+  --space-xl: 4rem;
+
+  /* Animations : lentes et fluides (200 à 300 ms, courbe douce). */
+  --transition-base: 0.25s ease;
+}
+
+/* Marges latérales de la DA : 24 px sur tablette, 16 px sur mobile. Les pages
+   utilisent --space-lg / --space-xl pour leurs marges et leurs écarts de
+   section, donc surcharger les tokens suffit. */
+@media (max-width: 1024px) {
+  :root {
+    --space-lg: 1.5rem;
+  }
+}
+@media (max-width: 640px) {
+  :root {
+    --space-lg: 1rem;
+    --space-xl: 2.5rem;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html {
+  height: 100%;
+  color-scheme: dark;
+  scroll-behavior: smooth;
+  scrollbar-color: var(--vynl-bordure) transparent;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: var(--vynl-texte);
+  background: var(--vynl-nuit);
+  font-family: var(--vynl-police-texte);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--vynl-bleu);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--vynl-cyan);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--vynl-bordure);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vynl-sillon);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--vynl-police-texte);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+input,
+button,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--vynl-bleu);
+}
+
+/* Logo / nom de marque et grands titres d'impact — Dela Gothic One, une
+   seule graisse, jamais sous 24 px, jamais sur du texte saisi par les
+   utilisateurs : la police est très large. */
+.font-brand {
+  font-family: var(--vynl-police-marque);
+  font-weight: 400;
+}
+.display-title {
+  font-family: var(--vynl-police-marque);
+  font-weight: 400;
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+/* Fond signature : aplat nuit + grande lueur bleue très floue derrière le
+   centre (même lumière que derrière l'icône). Écrans d'accueil / d'auth. */
+.bg-signature::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(60vw 60vw at 50% 40%, rgba(0, 89, 249, 0.25), transparent 70%);
+}
+
+/* Logo horizontal : icône à gauche, nom à droite (hauteur du nom ≈ 45 % de
+   l'icône, écart ≈ 15 % de l'icône). */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--vynl-texte);
+}
+.logo__word {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+/* ---------------------------------------------------------------------
+   Utilitaires partagés — boutons, champs, cartes. Les styles inline des
+   composants gardent la mise en page (flex, gap, tailles) ; ces classes
+   portent l'apparence (couleurs, transitions, hover/focus) pour que tout
+   se comporte pareil sans dupliquer les mêmes objets de style partout.
+   --------------------------------------------------------------------- */
+
+/* Pilule de 48 px ; .btn-sm (36 px) pour les actions secondaires en ligne. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0 1.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform var(--transition-base), border-color var(--transition-base),
+    color var(--transition-base), background-color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+.btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+.btn:disabled {
+  cursor: default;
+}
+.btn-sm {
+  min-height: 36px;
+  padding: 0 1rem;
+  font-size: 0.875rem;
+}
+
+.btn-primary {
+  background: var(--vynl-bleu);
+  color: #fff;
+}
+.btn-primary:not(:disabled):hover,
+.btn-primary:not(:disabled):active {
+  background: var(--vynl-bleu-profond);
+}
+.btn-primary:not(:disabled):hover {
+  box-shadow: var(--vynl-lueur);
+}
+.btn-primary:disabled {
+  background: var(--vynl-vinyle);
+  color: var(--vynl-texte-3);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--vynl-texte);
+  border-color: var(--vynl-sillon);
+}
+.btn-secondary:not(:disabled):hover {
+  background: var(--vynl-vinyle);
+}
+.btn-secondary:not(:disabled):active {
+  background: var(--vynl-abysse);
+}
+.btn-secondary:disabled {
+  border-color: var(--vynl-vinyle);
+  color: var(--vynl-texte-3);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--vynl-erreur);
+  border-color: rgba(255, 77, 109, 0.4);
+}
+.btn-danger:not(:disabled):hover {
+  background: rgba(255, 77, 109, 0.1);
+  border-color: var(--vynl-erreur);
+}
+.btn-danger:disabled {
+  border-color: var(--vynl-vinyle);
+  color: var(--vynl-texte-3);
+}
+
+.btn-plain {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  transition: color var(--transition-base), opacity var(--transition-base);
+}
+.btn-plain:hover {
+  opacity: 0.8;
+}
+
+.text-link {
+  color: var(--vynl-bleu);
+}
+.text-link:hover {
+  text-decoration: underline;
+}
+
+.input-field {
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  border-radius: var(--vynl-rayon-champ);
+  border: 1px solid var(--vynl-bordure);
+  background: var(--vynl-vinyle);
+  color: var(--vynl-texte);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+.input-field::placeholder {
+  color: var(--vynl-texte-3);
+}
+.input-field:focus-visible {
+  outline: 2px solid var(--vynl-cyan);
+  outline-offset: 0;
+  border-color: var(--vynl-cyan);
+}
+.input-field option {
+  background: var(--vynl-abysse);
+  color: var(--vynl-texte);
+}
+/* Version compacte (36 px) pour les sélecteurs de tri / de période. */
+.input-field--sm {
+  min-height: 36px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.875rem;
+}
+
+/* Sélecteur de fichier : le bouton natif devient une pilule secondaire. */
+input[type="file"] {
+  color: var(--vynl-texte-2);
+  font-size: 0.875rem;
+}
+input[type="file"]::file-selector-button {
+  min-height: 36px;
+  margin-right: 0.75rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--vynl-sillon);
+  background: transparent;
+  color: var(--vynl-texte);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-base);
+}
+input[type="file"]::file-selector-button:hover {
+  background: var(--vynl-vinyle);
+}
+
+.hover-card {
+  display: block;
+  transition: transform var(--transition-base);
+}
+.hover-card:hover {
+  transform: translateY(-3px);
+}
+
+/* Ligne de liste (morceaux, releases, fichiers). Elle passe à la ligne quand
+   la place manque : sur mobile le statut descend sous le titre au lieu
+   d'écraser celui-ci. .list-row__main est la colonne du titre. */
+.list-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem var(--space-sm);
+  padding: 0.65rem var(--space-sm);
+  border-radius: var(--vynl-rayon-champ);
+  border: 1px solid var(--vynl-bordure);
+  transition: background-color var(--transition-base), border-color var(--transition-base);
+}
+.list-row:hover {
+  background: var(--vynl-survol);
+}
+.list-row__main {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.icon-btn {
+  transition: transform var(--transition-base), opacity var(--transition-base),
+    box-shadow var(--transition-base);
+}
+.icon-btn:hover {
+  transform: scale(1.06);
+}
+.icon-btn:active {
+  transform: scale(0.96);
+}
+
+/* Icônes : style trait, 1,75 px, bouts arrondis ; 20 px dans les listes, 24 px
+   dans la navigation. */
+.icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+
+/* Petits badges : les seuls textes en capitales de la DA, avec un espacement
+   de lettres de 0,08 em. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--vynl-sillon);
+  border-radius: 999px;
+  color: var(--vynl-texte-2);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.badge--ai {
+  border-color: var(--vynl-bleu);
+  background: rgba(0, 89, 249, 0.16);
+  color: var(--vynl-reflet);
+}
+
+/* Statuts d'un morceau / d'une release. Couleurs fonctionnelles de la DA :
+   succès = publié, alerte = en relecture ; le reste reste neutre. Un point
+   plein pour « c'est acté », un contour pointillé + point creux pour « pas
+   encore » (Coming). */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--vynl-sillon);
+  border-radius: 999px;
+  color: var(--vynl-texte-2);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.status--ok {
+  border-color: rgba(46, 230, 166, 0.4);
+  background: rgba(46, 230, 166, 0.08);
+  color: var(--vynl-succes);
+}
+.status--warn {
+  border-color: rgba(255, 181, 71, 0.4);
+  background: rgba(255, 181, 71, 0.08);
+  color: var(--vynl-alerte);
+}
+.status--idle {
+  border-color: var(--vynl-bordure);
+  color: var(--vynl-texte-3);
+}
+.status--soon {
+  border-style: dashed;
+  color: var(--vynl-texte-3);
+}
+.status--soon::before {
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
+/* ---------------------------------------------------------------------
+   Coque de l'admin — barre latérale (desktop) / barre du bas en verre
+   (mobile), en-tête, cartes. Données réelles uniquement : les cartes sans
+   donnée affichent un état « Coming », jamais un chiffre inventé.
+   --------------------------------------------------------------------- */
+
+.shell {
+  display: flex;
+  flex: 1;
+}
+.shell__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-left: var(--sidebar-width);
+}
+.shell__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  /* Niveau 1 de profondeur : Abysse, une marche au-dessus du fond Nuit. */
+  background: var(--vynl-abysse);
+  border-bottom: 1px solid var(--vynl-bordure);
+}
+.shell__content {
+  flex: 1;
+  padding: var(--space-lg);
+}
+.shell__brand-mobile {
+  display: none;
+}
+.shell__artist {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  color: var(--vynl-texte-2);
+}
+.shell__artist strong {
+  font-weight: 600;
+  color: var(--vynl-texte);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--vynl-pochette-vide);
+  background-size: cover;
+  background-position: center;
+}
+
+/* fixed plutôt que sticky : « overflow-x: hidden » sur html/body fait
+   implicitement passer overflow-y à « auto », ce qui rend sticky imprévisible
+   (même raison que le mini-lecteur de l'app auditeur). */
+.sidebar {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  width: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-sm);
+  background: var(--vynl-abysse);
+  border-right: 1px solid var(--vynl-bordure);
+}
+.sidebar__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0 0.85rem;
+}
+.sidebar__tag {
+  padding-left: 0.1rem;
+  color: var(--vynl-texte-3);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.sidebar__links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px;
+  padding: 0 0.85rem;
+  border-radius: var(--vynl-rayon-champ);
+  color: var(--vynl-texte-2);
+  font-size: 0.9375rem;
+  transition: background-color var(--transition-base), color var(--transition-base);
+}
+.sidebar-link .icon {
+  width: 24px;
+  height: 24px;
+}
+.sidebar-link:hover {
+  color: var(--vynl-texte);
+  background: var(--vynl-vinyle);
+}
+.sidebar-link.active {
+  color: var(--vynl-texte);
+  background: var(--vynl-vinyle);
+  font-weight: 600;
+}
+.sidebar-link.active .icon {
+  color: var(--vynl-cyan);
+}
+.sidebar-link.active::before {
+  content: "";
+  position: absolute;
+  left: -0.5rem;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--vynl-cyan);
+  box-shadow: var(--vynl-lueur-cyan);
+}
+
+@media (max-width: 860px) {
+  .shell__main {
+    margin-left: 0;
+    padding-bottom: var(--bottom-nav-height);
+  }
+  .shell__brand-mobile {
+    display: inline-flex;
+  }
+  /* L'avatar reste le raccourci vers la page artiste ; le nom disparaît. */
+  .shell__artist {
+    margin-left: auto;
+  }
+  .shell__artist strong {
+    display: none;
+  }
+
+  /* Navigation du bas : verre, 5 icônes max, inactif Texte 3, actif cyan. */
+  .sidebar {
+    top: auto;
+    width: auto;
+    right: 0;
+    height: var(--bottom-nav-height);
+    flex-direction: row;
+    gap: 0;
+    padding: 0 var(--space-xs);
+    border-right: none;
+    border-top: 1px solid var(--vynl-bordure);
+    background: var(--vynl-verre);
+    -webkit-backdrop-filter: var(--vynl-flou-verre);
+    backdrop-filter: var(--vynl-flou-verre);
+  }
+  .sidebar__brand {
+    display: none;
+  }
+  .sidebar__links {
+    flex: 1;
+    flex-direction: row;
+    gap: 0;
+  }
+  .sidebar-link {
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    min-width: 0;
+    padding: 0;
+    background: none;
+    color: var(--vynl-texte-3);
+    font-size: 0.6875rem;
+    font-weight: 500;
+  }
+  .sidebar-link:hover {
+    background: none;
+  }
+  .sidebar-link.active {
+    background: none;
+    color: var(--vynl-cyan);
+    font-weight: 500;
+  }
+  .sidebar-link.active::before {
+    display: none;
+  }
+  /* Revenue et Wallet (« Coming ») ne tiennent pas dans les 5 icônes max. */
+  .sidebar-link--desktop-only {
+    display: none;
+  }
+}
+
+.dash-card {
+  background: var(--vynl-vinyle);
+  border: 1px solid var(--vynl-bordure);
+  border-radius: var(--vynl-rayon-carte);
+  padding: var(--space-md);
+}
+/* Carte mise en avant : liseré brillant en haut, comme le bord du V. Une par
+   écran au plus. */
+.dash-card--featured {
+  border-top-color: rgba(25, 227, 255, 0.5);
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.stat-card .stat-label {
+  color: var(--vynl-texte-2);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+/* Chiffres à chasse fixe : un compteur ne « saute » pas quand il change. */
+.stat-card .stat-value {
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: var(--space-sm);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--vynl-sillon);
+  background: transparent;
+  color: var(--vynl-texte-2);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--transition-base), color var(--transition-base),
+    background-color var(--transition-base);
+}
+.pill:hover {
+  background: var(--vynl-vinyle);
+  color: var(--vynl-texte);
+}
+.pill.active {
+  border-color: var(--vynl-bleu);
+  background: rgba(0, 89, 249, 0.16);
+  color: var(--vynl-texte);
+}
+
+.coming-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+  color: var(--vynl-texte-2);
+}
+
+/* Graphiques : la série principale est cyan (élément actif, comme la partie
+   lue d'une barre de progression), le remplissage s'efface vers le bas, la
+   grille et les axes restent dans les tons Sillon / Texte 3. */
+.chart-grid {
+  stroke: var(--vynl-bordure);
+}
+.chart-axis {
+  fill: var(--vynl-texte-3);
+  font-size: 11px;
+}
+
+/* ---------------------------------------------------------------------
+   Spécifique à l'admin — titre de page, grille de chiffres, avertissement.
+   --------------------------------------------------------------------- */
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-sm);
+}
+
+.notice {
+  margin-bottom: var(--space-sm);
+  padding: 0.65rem var(--space-sm);
+  border: 1px solid rgba(255, 181, 71, 0.4);
+  border-radius: var(--vynl-rayon-champ);
+  background: rgba(255, 181, 71, 0.08);
+  color: var(--vynl-alerte);
+  font-size: 0.875rem;
+}
+
+.coming-soon__list {
+  padding-left: 1.1rem;
+  color: var(--vynl-texte-3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
