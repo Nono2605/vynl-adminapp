@@ -823,3 +823,183 @@ input[type="file"]::file-selector-button:hover {
   letter-spacing: 0.05em;
   word-break: break-all;
 }
+
+/* ---------------------------------------------------------------------
+   Listes et fiches : tableaux, filtres, pagination, paires clé/valeur.
+   --------------------------------------------------------------------- */
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.muted {
+  color: var(--vynl-texte-3);
+  font-size: 0.8125rem;
+}
+.stat-card .stat-hint {
+  color: var(--vynl-texte-3);
+  font-size: 0.75rem;
+}
+
+.status--error {
+  border-color: rgba(255, 77, 109, 0.4);
+  background: rgba(255, 77, 109, 0.08);
+  color: var(--vynl-erreur);
+}
+.status--info {
+  border-color: var(--vynl-bleu);
+  background: rgba(0, 89, 249, 0.16);
+  color: var(--vynl-reflet);
+}
+
+/* Le défilement horizontal reste dans le tableau : la page, elle, ne bouge pas. */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--vynl-bordure);
+  border-radius: var(--vynl-rayon-carte);
+  background: var(--vynl-vinyle);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.table th {
+  padding: 0.75rem var(--space-sm);
+  border-bottom: 1px solid var(--vynl-bordure);
+  color: var(--vynl-texte-2);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-align: left;
+  white-space: nowrap;
+}
+.table td {
+  padding: 0.7rem var(--space-sm);
+  border-bottom: 1px solid var(--vynl-bordure);
+  vertical-align: middle;
+}
+.table tr:last-child td {
+  border-bottom: none;
+}
+.table tbody tr:hover {
+  background: var(--vynl-survol);
+}
+.table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.table .cell-main {
+  min-width: 12rem;
+  max-width: 24rem;
+  overflow-wrap: anywhere;
+}
+.table .empty {
+  padding: var(--space-md);
+  color: var(--vynl-texte-3);
+  text-align: center;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+.filters .input-field {
+  min-width: 0;
+}
+.filters__search {
+  flex: 1 1 14rem;
+}
+
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+.pager__links {
+  display: inline-flex;
+  gap: var(--space-xs);
+}
+
+.section-gap {
+  margin-top: var(--space-md);
+}
+.two-col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-sm);
+}
+
+/* Paires libellé / valeur d'une fiche. */
+.kv {
+  display: grid;
+  grid-template-columns: minmax(7rem, max-content) 1fr;
+  gap: 0.4rem var(--space-md);
+  font-size: 0.875rem;
+}
+.kv dt {
+  color: var(--vynl-texte-2);
+}
+.kv dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Histogramme des écoutes par jour : barres CSS, la plus haute = 100 %. */
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 160px;
+  padding-top: var(--space-sm);
+}
+.bars__col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 4px;
+}
+.bars__bar {
+  position: relative;
+  width: 100%;
+  min-height: 2px;
+  border-radius: 6px 6px 0 0;
+  background: var(--vynl-sillon);
+}
+.bars__bar-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: var(--vynl-cyan);
+}
+.bars__label {
+  color: var(--vynl-texte-3);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+.bars__value {
+  color: var(--vynl-texte-2);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}

@@ -48,11 +48,13 @@ delete from auth.mfa_factors where user_id = '<the admin user id>';
 
 ## Deploy (Vercel)
 
-Import this repo on Vercel (framework: Next.js, nothing else to configure) and add the three environment variables above for Production and Preview. Every push to `main` deploys.
+Import this repo on Vercel (framework: Next.js, nothing else to configure) and add the three environment variables above. Put `SUPABASE_SECRET_KEY` in Production only and mark it Sensitive. `NEXT_PUBLIC_*` values are baked in at build time: redeploy after changing them. Every push to `main` deploys.
+
+`GET /api/health` is a public deployment check: it reports (booleans only) which variables are set and whether the secret key can read the database.
 
 ## Roadmap
 
 1. Foundations: login, admin guard, shell, first admin account
-2. Admin MFA (TOTP), read-only pages: users, subscriptions, creators, catalog, plays
+2. Admin MFA (TOTP), read-only pages: users, subscriptions, creators, catalog, plays (done)
 3. Actions with an audit log: suspend, roles, password reset, publish and archive, AI declaration review
 4. Money: royalty periods, Stripe Connect (creator KYC and automated payouts), fraud
