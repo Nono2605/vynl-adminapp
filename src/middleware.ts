@@ -6,7 +6,7 @@ import { createServerClient } from "@supabase/ssr";
 // anonymes vers /login. Ce n'est PAS la barrière de sécurité : le rôle admin
 // est vérifié dans requireAdmin() (src/lib/session.ts), côté serveur, à chaque
 // layout / page / action.
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/api/health"];
 
 export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
