@@ -51,6 +51,7 @@ What can be done:
 - **Users:** suspend / reactivate (sets `users.status` and a Supabase Auth ban; the API also refuses non-active accounts), change role (admin rights need the email typed to confirm), set a temporary password (shown once, never stored). You cannot act on your own account.
 - **Publications:** a track or album in review is approved (published) or refused (back to draft, with a reason the creator can read); a published one can be archived and an archived one restored. Publishing a track re-checks the audio file, duration, AI declaration and splits server-side.
 - **AI declarations:** approve or reject (a rejection needs a note).
+- **Plays and fraud:** open a play to see its signals and heartbeats, then exclude it (`counted = false` with an `admin: …` reason, never deleted) or count it again. Fraud events can be resolved or reopened. A play that falls in a closed royalty period (`closed`, `computed`, `published`) cannot be changed. Nothing detects fraud automatically yet: the fraud tables are filled by a detection job that does not exist.
 
 ## Access control
 
@@ -70,4 +71,4 @@ Import this repo on Vercel (framework: Next.js, nothing else to configure) and a
 2. Admin MFA (TOTP), read-only pages: users, subscriptions, creators, catalog, plays (done)
 3. Actions with an audit log: suspend, roles, temporary password, publish / refuse / archive, AI declaration review (done)
    Next in this area: automatic audio scan (copyright / plagiarism) as one more review check
-4. Money: royalty periods, Stripe Connect (creator KYC and automated payouts), fraud
+4. Fraud and play control (done). Money (waiting on the remuneration spec): payments and plans, period calculation and ledger, Stripe Connect (creator KYC and automated payouts)

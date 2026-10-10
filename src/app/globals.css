@@ -1097,3 +1097,17 @@ audio {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: var(--space-md);
 }
+
+/* Détail JSON d'un événement : lisible, défilable, jamais interprété. */
+.json {
+  max-height: 360px;
+  overflow: auto;
+  padding: var(--space-sm);
+  border: 1px solid var(--vynl-bordure);
+  border-radius: var(--vynl-rayon-champ);
+  background: var(--vynl-abysse);
+  color: var(--vynl-texte-2);
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

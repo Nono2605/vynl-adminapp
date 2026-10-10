@@ -187,7 +187,11 @@ export default async function PlaysPage({ searchParams }: { searchParams: Promis
               const email = first(play.users)?.email;
               return (
                 <tr key={play.id}>
-                  <td>{formatDateTime(play.started_at)}</td>
+                  <td>
+                    <Link href={`/plays/${play.id}`} className="text-link">
+                      {formatDateTime(play.started_at)}
+                    </Link>
+                  </td>
                   <td className="cell-main">
                     {play.user_id ? (
                       <Link href={`/users/${play.user_id}`} className="text-link">

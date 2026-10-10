@@ -360,7 +360,11 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
               )}
               {plays.map((play) => (
                 <tr key={play.id}>
-                  <td>{formatDateTime(play.started_at)}</td>
+                  <td>
+                    <Link href={`/plays/${play.id}`} className="text-link">
+                      {formatDateTime(play.started_at)}
+                    </Link>
+                  </td>
                   <td className="cell-main">{first(play.tracks)?.title ?? "—"}</td>
                   <td>{first(play.artists)?.name ?? "—"}</td>
                   <td className="num">{formatDuration(play.validated_seconds)}</td>

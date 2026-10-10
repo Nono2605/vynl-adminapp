@@ -21,6 +21,11 @@ const VARIANTS: Record<string, string> = {
   // erreur
   failed: "status--error",
   rejected: "status--error",
+  high: "status--error",
+  critical: "status--error",
+  medium: "status--warn",
+  low: "status--idle",
+  resolved: "status--ok",
   // rôles
   admin: "status--info",
   creator: "status--info",

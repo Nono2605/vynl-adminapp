@@ -17,18 +17,19 @@ export default async function OverviewPage() {
   const head = { count: "exact", head: true } as const;
   const since7Days = daysAgo(7).toISOString();
 
-  const [creators, published, inReview, pendingAi, plays7d, subscriptions] = await Promise.all([
+  const [creators, published, inReview, pendingAi, plays7d, openFraud, subscriptions] = await Promise.all([
     db.from("users").select("id", head).eq("role", "creator"),
     db.from("tracks").select("id", head).eq("status", "published"),
     db.from("tracks").select("id", head).eq("status", "in_review"),
     db.from("ai_declarations").select("id", head).eq("status", "pending_review"),
     db.from("plays").select("id", head).eq("counted", true).gte("started_at", since7Days),
+    db.from("fraud_events").select("id", head).eq("resolved", false),
     getSubscriptionBreakdown(),
   ]);
 
   const count = (result: { count: number | null; error: { message: string } | null }) =>
     result.error ? null : result.count;
-  const errors = [creators, published, inReview, pendingAi, plays7d]
+  const errors = [creators, published, inReview, pendingAi, plays7d, openFraud]
     .map((result) => result.error?.message)
     .concat(subscriptions.error)
     .filter(Boolean);
@@ -62,6 +63,7 @@ export default async function OverviewPage() {
       <h2 className="section-title section-gap">Listening</h2>
       <div className="stat-grid">
         <StatCard label="Plays, last 7 days" value={count(plays7d)} hint="Counted plays only" />
+        <StatCard label="Open fraud events" value={count(openFraud)} warn />
       </div>
 
       <section className="dash-card coming-soon section-gap">
