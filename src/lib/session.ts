@@ -9,19 +9,30 @@ export interface AdminUser {
   email: string;
 }
 
+// Les états d'un visiteur face à l'admin, du moins au plus authentifié :
+//  * anonymous : pas connecté ;
+//  * forbidden : connecté mais pas un admin actif ;
+//  * mfa_setup : admin, mais aucun second facteur vérifié -> doit en créer un ;
+//  * mfa_verify : admin avec un second facteur, session encore en AAL1 ;
+//  * ok : admin, session en AAL2 (mot de passe + code TOTP).
 export type AdminCheck =
   | { status: "anonymous" }
   | { status: "forbidden"; email: string | undefined }
+  | { status: "mfa_setup"; admin: AdminUser }
+  | { status: "mfa_verify"; admin: AdminUser }
   | { status: "ok"; admin: AdminUser };
 
-// Vérifie QUI est connecté puis QUEL RÔLE il a. Deux règles :
+type AdminIdentity =
+  | { status: "anonymous" }
+  | { status: "forbidden"; email: string | undefined }
+  | { status: "admin"; admin: AdminUser };
+
+// Étape 1 : QUI est connecté, et a-t-il le rôle admin ? Deux règles :
 //  * getUser() (appel à Supabase Auth) et jamais getSession() : la session des
 //    cookies n'est pas vérifiée côté serveur, elle peut être forgée.
 //  * Le rôle est lu dans public.users, jamais dans le JWT (même règle que
 //    requireCreator côté API) : un rôle retiré prend effet immédiatement.
-// Enveloppée dans cache() : layout et pages l'appellent tous, une seule requête
-// par rendu.
-export const getAdmin = cache(async function getAdmin(): Promise<AdminCheck> {
+const loadAdminIdentity = cache(async function loadAdminIdentity(): Promise<AdminIdentity> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -43,7 +54,30 @@ export const getAdmin = cache(async function getAdmin(): Promise<AdminCheck> {
     return { status: "forbidden", email: user.email };
   }
 
-  return { status: "ok", admin: { id: data.id, email: data.email } };
+  return { status: "admin", admin: { id: data.id, email: data.email } };
+});
+
+// Étape 2 : le niveau d'assurance (AAL) de la session. Le niveau vient du JWT
+// de la session, celui-là même que getUser() vient de faire valider par
+// Supabase Auth à l'étape 1 : on ne lit donc pas un jeton non vérifié.
+// Enveloppée dans cache() : layout et pages l'appellent tous, une seule requête
+// par rendu.
+export const getAdmin = cache(async function getAdmin(): Promise<AdminCheck> {
+  const identity = await loadAdminIdentity();
+  if (identity.status !== "admin") return identity;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (error || !data) {
+    throw new Error(`Could not read the session assurance level: ${error?.message ?? "no data"}`);
+  }
+
+  if (data.currentLevel === "aal2") return { status: "ok", admin: identity.admin };
+
+  // nextLevel vaut aal2 dès qu'un facteur vérifié existe ; sinon aal1.
+  return data.nextLevel === "aal2"
+    ? { status: "mfa_verify", admin: identity.admin }
+    : { status: "mfa_setup", admin: identity.admin };
 });
 
 // À appeler en tête de CHAQUE layout, page et Server Action de l'admin. Le
@@ -52,8 +86,16 @@ export const getAdmin = cache(async function getAdmin(): Promise<AdminCheck> {
 export const requireAdmin = cache(async function requireAdmin(): Promise<AdminUser> {
   const check = await getAdmin();
 
-  if (check.status === "anonymous") redirect("/login");
-  if (check.status === "forbidden") redirect("/login?error=forbidden");
-
-  return check.admin;
+  switch (check.status) {
+    case "anonymous":
+      redirect("/login");
+    case "forbidden":
+      redirect("/login?error=forbidden");
+    case "mfa_setup":
+      redirect("/mfa/setup");
+    case "mfa_verify":
+      redirect("/mfa/verify");
+    case "ok":
+      return check.admin;
+  }
 });

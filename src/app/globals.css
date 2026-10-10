@@ -805,3 +805,21 @@ input[type="file"]::file-selector-button:hover {
   flex-direction: column;
   gap: 0.25rem;
 }
+
+/* Page MFA : le QR code doit rester noir sur blanc pour être lisible par une
+   application d'authentification, même sur fond sombre. */
+.qr-box {
+  align-self: flex-start;
+  padding: 12px;
+  border-radius: var(--vynl-rayon-champ);
+  background: #fff;
+  line-height: 0;
+}
+.secret {
+  display: inline-block;
+  margin-top: 0.25rem;
+  color: var(--vynl-texte-2);
+  font-size: 0.875rem;
+  letter-spacing: 0.05em;
+  word-break: break-all;
+}

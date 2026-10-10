@@ -5,13 +5,15 @@ import { getAdmin } from "@/lib/session";
 import { LoginForm } from "./LoginForm";
 
 // Pas de requireAdmin() ici (il renvoie vers /login : boucle). On regarde
-// l'état : déjà admin -> tableau de bord ; connecté mais pas admin -> message
-// et bouton de déconnexion (l'action peut effacer les cookies, pas un Server
-// Component) ; anonyme -> formulaire.
+// l'état : déjà admin -> tableau de bord (ou étape MFA qui manque) ; connecté
+// mais pas admin -> message et bouton de déconnexion (l'action peut effacer
+// les cookies, pas un Server Component) ; anonyme -> formulaire.
 export default async function LoginPage() {
   const check = await getAdmin();
 
   if (check.status === "ok") redirect("/");
+  if (check.status === "mfa_setup") redirect("/mfa/setup");
+  if (check.status === "mfa_verify") redirect("/mfa/verify");
 
   return (
     <div className="bg-signature" style={{ maxWidth: 400, margin: "var(--space-xl) auto", padding: "0 var(--space-md)" }}>

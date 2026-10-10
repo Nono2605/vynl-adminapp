@@ -30,10 +30,20 @@ npm run create-admin -- you@example.com
 
 Asks for the password in the terminal (hidden, never written anywhere), creates the Supabase Auth user, and sets `public.users.role = 'admin'`. Re-run it on an existing account to promote it; add `--reset-password` to change its password.
 
+## Two-step login (TOTP)
+
+Every admin session must reach AAL2: password, then a 6-digit code from an authenticator app. The first time, `/mfa/setup` shows a QR code to scan; afterwards `/mfa/verify` only asks for the code. Requires TOTP to be enabled in Supabase (Authentication > Sign In / Providers > Multi-Factor).
+
+**Lost your phone?** Remove the factor, then log in again and set up a new one. In the Supabase SQL editor:
+
+```sql
+delete from auth.mfa_factors where user_id = '<the admin user id>';
+```
+
 ## Access control
 
 - `src/middleware.ts` refreshes the session and sends anonymous visitors to `/login`. It is **not** the security boundary.
-- `requireAdmin()` (`src/lib/session.ts`) is. It validates the user with Supabase Auth (`getUser()`), then reads `role` and `status` from `public.users` (never from the JWT).
+- `requireAdmin()` (`src/lib/session.ts`) is. It validates the user with Supabase Auth (`getUser()`), reads `role` and `status` from `public.users` (never from the JWT), then requires an AAL2 session.
 - Call `requireAdmin()` at the top of **every page that reads data and every Server Action**. A layout does not re-run when navigating between pages that share it.
 
 ## Deploy (Vercel)
@@ -42,7 +52,7 @@ Import this repo on Vercel (framework: Next.js, nothing else to configure) and a
 
 ## Roadmap
 
-1. Foundations: login, admin guard, shell, first admin account (this commit)
+1. Foundations: login, admin guard, shell, first admin account
 2. Admin MFA (TOTP), read-only pages: users, subscriptions, creators, catalog, plays
 3. Actions with an audit log: suspend, roles, password reset, publish and archive, AI declaration review
 4. Money: royalty periods, Stripe Connect (creator KYC and automated payouts), fraud
