@@ -40,6 +40,18 @@ Every admin session must reach AAL2: password, then a 6-digit code from an authe
 delete from auth.mfa_factors where user_id = '<the admin user id>';
 ```
 
+## Admin actions and the audit log
+
+Before any admin action works, apply `supabase/migrations/20261010100000_admin_actions.sql` once in the Supabase SQL editor. It creates `admin_audit_log` and adds the refusal-reason columns (`tracks.rejection_reason`, `albums.rejection_reason`, `ai_declarations.review_note`).
+
+Every action goes through `runAudited()` (`src/lib/actions.ts`): a `pending` entry is written **before** the change, so if the log is unavailable nothing happens, and the entry is finalized as `success` or `failed` afterwards. A trigger makes finalized entries read-only and undeletable. Never put a secret (password, token) in an entry's details.
+
+What can be done:
+
+- **Users:** suspend / reactivate (sets `users.status` and a Supabase Auth ban; the API also refuses non-active accounts), change role (admin rights need the email typed to confirm), set a temporary password (shown once, never stored). You cannot act on your own account.
+- **Publications:** a track or album in review is approved (published) or refused (back to draft, with a reason the creator can read); a published one can be archived and an archived one restored. Publishing a track re-checks the audio file, duration, AI declaration and splits server-side.
+- **AI declarations:** approve or reject (a rejection needs a note).
+
 ## Access control
 
 - `src/middleware.ts` refreshes the session and sends anonymous visitors to `/login`. It is **not** the security boundary.
@@ -56,5 +68,6 @@ Import this repo on Vercel (framework: Next.js, nothing else to configure) and a
 
 1. Foundations: login, admin guard, shell, first admin account
 2. Admin MFA (TOTP), read-only pages: users, subscriptions, creators, catalog, plays (done)
-3. Actions with an audit log: suspend, roles, password reset, publish and archive, AI declaration review
+3. Actions with an audit log: suspend, roles, temporary password, publish / refuse / archive, AI declaration review (done)
+   Next in this area: automatic audio scan (copyright / plagiarism) as one more review check
 4. Money: royalty periods, Stripe Connect (creator KYC and automated payouts), fraud

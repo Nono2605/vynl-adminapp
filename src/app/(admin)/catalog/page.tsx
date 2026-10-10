@@ -175,7 +175,9 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                 return (
                   <tr key={track.id}>
                     <td className="cell-main">
-                      {track.title}
+                      <Link href={`/catalog/tracks/${track.id}`} className="text-link">
+                        {track.title}
+                      </Link>
                       {track.explicit && <span className="badge" style={{ marginLeft: "0.5rem" }}>E</span>}
                     </td>
                     <td>
@@ -233,7 +235,11 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                 const albumArtist = first(album.artists);
                 return (
                   <tr key={album.id}>
-                    <td className="cell-main">{album.title}</td>
+                    <td className="cell-main">
+                      <Link href={`/catalog/albums/${album.id}`} className="text-link">
+                        {album.title}
+                      </Link>
+                    </td>
                     <td>
                       {albumArtist ? (
                         <Link href={`/catalog?view=albums&artist=${albumArtist.id}`} className="text-link">
@@ -260,7 +266,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
 
       <Pager basePath="/catalog" params={filters} page={page} total={list.count ?? 0} />
 
-      <p className="muted section-gap">Read-only for now: publishing, archiving and AI declaration review arrive in the next step.</p>
+      <p className="muted section-gap">Open a track or an album to review it, publish it, or take it down.</p>
     </>
   );
 }

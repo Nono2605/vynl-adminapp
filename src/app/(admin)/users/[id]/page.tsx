@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { setTemporaryPassword, setUserRole, setUserStatus } from "@/app/actions/users";
+import { ActionForm } from "@/components/ActionForm";
+import { AuditTrail } from "@/components/AuditTrail";
 import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
 import { StatCard } from "@/components/StatCard";
@@ -22,7 +25,7 @@ interface PlayRow {
 }
 
 export default async function UserPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const { id } = await params;
   if (!isUuid(id)) notFound();
@@ -167,6 +170,111 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
         </section>
       </div>
 
+      {account.status !== "deleted" && (
+        <section className="dash-card section-gap">
+          <h2 className="section-title">Manage account</h2>
+          {account.id === admin.id ? (
+            <p className="muted">This is your own account: it cannot be suspended or changed from here.</p>
+          ) : (
+            <div className="manage-grid">
+              <div>
+                <h3 className="subsection-title">Access</h3>
+                {account.status === "active" ? (
+                  <ActionForm
+                    action={setUserStatus}
+                    submitLabel="Suspend account"
+                    pendingLabel="Suspending…"
+                    tone="danger"
+                    confirm={`Suspend ${account.email}? They will be locked out of Vynl.`}
+                  >
+                    <input type="hidden" name="userId" value={account.id} />
+                    <input type="hidden" name="status" value="suspended" />
+                    <textarea
+                      name="reason"
+                      required
+                      minLength={3}
+                      maxLength={500}
+                      placeholder="Reason (kept in the audit log)"
+                      className="input-field"
+                    />
+                  </ActionForm>
+                ) : (
+                  <ActionForm action={setUserStatus} submitLabel="Reactivate account" pendingLabel="Reactivating…">
+                    <input type="hidden" name="userId" value={account.id} />
+                    <input type="hidden" name="status" value="active" />
+                    <textarea
+                      name="reason"
+                      maxLength={500}
+                      placeholder="Note (optional, kept in the audit log)"
+                      className="input-field"
+                    />
+                  </ActionForm>
+                )}
+              </div>
+
+              <div>
+                <h3 className="subsection-title">Role</h3>
+                <ActionForm
+                  action={setUserRole}
+                  submitLabel="Change role"
+                  pendingLabel="Saving…"
+                  tone="secondary"
+                  confirm={`Change the role of ${account.email}?`}
+                >
+                  <input type="hidden" name="userId" value={account.id} />
+                  <select name="role" defaultValue={account.role} className="input-field input-field--sm">
+                    <option value="listener">listener</option>
+                    <option value="creator">creator</option>
+                    <option value="admin">admin</option>
+                  </select>
+                  <textarea
+                    name="reason"
+                    required
+                    minLength={3}
+                    maxLength={500}
+                    placeholder="Reason (kept in the audit log)"
+                    className="input-field"
+                  />
+                  <input
+                    type="email"
+                    name="confirmEmail"
+                    placeholder="Admin rights only: type the email to confirm"
+                    autoComplete="off"
+                    className="input-field input-field--sm"
+                  />
+                </ActionForm>
+              </div>
+
+              {account.role !== "admin" && (
+                <div>
+                  <h3 className="subsection-title">Password</h3>
+                  <ActionForm
+                    action={setTemporaryPassword}
+                    submitLabel="Set a temporary password"
+                    pendingLabel="Generating…"
+                    tone="secondary"
+                    confirm={`Replace the password of ${account.email} with a new temporary one? Their current password stops working.`}
+                  >
+                    <input type="hidden" name="userId" value={account.id} />
+                    <textarea
+                      name="reason"
+                      required
+                      minLength={3}
+                      maxLength={500}
+                      placeholder="Reason, e.g. support request (kept in the audit log)"
+                      className="input-field"
+                    />
+                  </ActionForm>
+                  <p className="muted" style={{ marginTop: "var(--space-xs)" }}>
+                    Existing sessions stay open until they expire. There is no &quot;forgot password&quot; page in the app yet.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="dash-card section-gap">
         <h2 className="section-title">Subscriptions</h2>
         {subs.length === 0 ? (
@@ -294,7 +402,10 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
         </section>
       )}
 
-      <p className="muted section-gap">Read-only for now: suspension, role changes and password reset arrive in the next step.</p>
+      <section className="section-gap">
+        <h2 className="section-title">Admin activity on this account</h2>
+        <AuditTrail targetType="user" targetId={account.id} />
+      </section>
     </>
   );
 }

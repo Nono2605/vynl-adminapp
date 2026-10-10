@@ -1003,3 +1003,97 @@ input[type="file"]::file-selector-button:hover {
   font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------------
+   Actions d'administration : formulaires, confirmations, contrôles de revue.
+   --------------------------------------------------------------------- */
+
+.action-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+.action-form .input-field {
+  width: 100%;
+}
+.action-form textarea.input-field {
+  min-height: 72px;
+  resize: vertical;
+}
+.form-error {
+  color: var(--vynl-erreur);
+  font-size: 0.875rem;
+}
+.form-ok {
+  color: var(--vynl-succes);
+  font-size: 0.875rem;
+}
+.secret-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.75rem var(--space-sm);
+  border: 1px solid var(--vynl-cyan);
+  border-radius: var(--vynl-rayon-champ);
+  background: rgba(25, 227, 255, 0.06);
+}
+.secret-box code {
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+.subsection-title {
+  margin-bottom: var(--space-xs);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--vynl-texte-2);
+}
+.manage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-md);
+}
+
+/* Contrôles de revue d'un morceau : une ligne par contrôle. */
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+}
+.checklist li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem var(--space-sm);
+  font-size: 0.875rem;
+}
+.checklist__label {
+  min-width: 8rem;
+  font-weight: 600;
+}
+.checklist__detail {
+  color: var(--vynl-texte-2);
+}
+
+.review-reason {
+  margin-bottom: var(--space-sm);
+  padding: 0.65rem var(--space-sm);
+  border: 1px solid rgba(255, 77, 109, 0.4);
+  border-radius: var(--vynl-rayon-champ);
+  background: rgba(255, 77, 109, 0.08);
+  font-size: 0.875rem;
+}
+audio {
+  width: 100%;
+  max-width: 560px;
+}
+.decision-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-md);
+}
