@@ -48,3 +48,12 @@ export function formatShare(part: number, whole: number): string {
   if (!whole) return "—";
   return `${((part / whole) * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
 }
+
+// 1000, "chf" -> « CHF 10.00 ». Montant en centimes, devise ISO 4217 en minuscules (comme la base).
+export function formatMoney(cents: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-CH", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
+  }
+}

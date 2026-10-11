@@ -8,7 +8,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
   const db = supabaseAdmin();
   const selectable = async (table: string, columns: string) => !(await db.from(table).select(columns).limit(0)).error;
 
-  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics, privacyConsents, privacyRetention] =
+  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics, privacyConsents, privacyRetention, billing] =
     await Promise.all([
       selectable("admin_audit_log", "id, outcome"),
       selectable("tracks", "rejection_reason"),
@@ -51,6 +51,13 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
       selectable("consents", "id, purpose, granted, policy_version"),
       // L'aperçu de la purge ne modifie rien : on l'appelle pour tester que la fonction existe.
       db.rpc("privacy_retention_preview").then((result) => !result.error),
+      // Facturation (API/supabase/migrations/20261013200000_billing_plans_payments.sql).
+      Promise.all([
+        selectable("plans", "code, price_cents, stripe_price_id"),
+        selectable("payments", "id, gross_cents, tax_cents, fee_cents"),
+        selectable("stripe_events", "id, outcome"),
+        selectable("billing_customers", "user_id"),
+      ]).then((r) => r.every(Boolean)),
     ]);
 
   return {
@@ -62,6 +69,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
     admin_analytics: analytics,
     // Migrations de l'API (API/supabase/migrations)
     privacy_consents_and_retention: privacyConsents && privacyRetention,
+    billing_plans_payments: billing,
     integrity_guards: integrity,
     listening_entitlement_and_plays: plays && heartbeats,
     creator_onboarding: onboarding,

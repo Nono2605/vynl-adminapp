@@ -15,7 +15,7 @@ export function apiBaseUrl(): string | null {
   return value && /^https?:\/\//.test(value) ? value : null;
 }
 
-export async function apiGet<T>(path: string): Promise<ApiResult<T>> {
+async function apiRequest<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<ApiResult<T>> {
   const base = apiBaseUrl();
   if (!base) return { ok: false, error: "API_BASE_URL is not set on this deployment.", notConfigured: true };
 
@@ -29,16 +29,25 @@ export async function apiGet<T>(path: string): Promise<ApiResult<T>> {
 
   try {
     const response = await fetch(base + path, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      method,
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
       cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
+      // Une création côté Stripe peut prendre quelques secondes.
+      signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { error?: string } | null;
-      return { ok: false, status: response.status, error: body?.error ?? `The API answered ${response.status}.` };
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      return { ok: false, status: response.status, error: payload?.error ?? `The API answered ${response.status}.` };
     }
     return { ok: true, data: (await response.json()) as T };
   } catch {
     return { ok: false, error: "The API did not answer (network error or timeout)." };
   }
 }
+
+export const apiGet = <T>(path: string) => apiRequest<T>("GET", path);
+export const apiPost = <T>(path: string, body?: unknown) => apiRequest<T>("POST", path, body);

@@ -9,7 +9,7 @@ import { oneOf, pageRange, parsePage, pick, type SearchParams } from "@/lib/quer
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-const GROUPS = ["user", "track", "album", "ai_declaration", "play", "fraud_event"] as const;
+const GROUPS = ["user", "track", "album", "ai_declaration", "play", "fraud_event", "billing"] as const;
 
 interface Entry {
   id: string;
@@ -85,6 +85,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
           { label: "AI declarations", value: "ai_declaration" },
           { label: "Plays", value: "play" },
           { label: "Fraud events", value: "fraud_event" },
+          { label: "Billing", value: "billing" },
         ]}
       />
 

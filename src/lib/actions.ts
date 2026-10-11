@@ -10,11 +10,12 @@ import type { ActionState } from "@/lib/actionTypes";
 // incident, journalisé comme tel.
 export class ActionError extends Error {}
 
-export type AuditTargetType = "user" | "track" | "album" | "ai_declaration" | "play" | "fraud_event";
+export type AuditTargetType = "user" | "track" | "album" | "ai_declaration" | "play" | "fraud_event" | "billing";
 
 export interface AuditTarget {
   type: AuditTargetType;
-  id: string;
+  // Absent quand la cible n'est pas une ligne (ex. « les plans » : action de facturation).
+  id?: string;
   label?: string;
 }
 
@@ -70,7 +71,7 @@ export async function runAudited(
       admin_email: admin.email,
       action,
       target_type: target.type,
-      target_id: target.id,
+      target_id: target.id ?? null,
       target_label: target.label ?? null,
       details,
     })
@@ -146,7 +147,7 @@ export async function recordAccess(
     admin_email: admin.email,
     action,
     target_type: target.type,
-    target_id: target.id,
+    target_id: target.id ?? null,
     target_label: target.label ?? null,
     details,
     outcome: "success",

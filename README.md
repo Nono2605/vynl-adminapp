@@ -72,6 +72,18 @@ Consent and retention live in the API's database (migration `API/supabase/migrat
 
 This admin holds **no Stripe key**. The API (Render) holds `STRIPE_SECRET_KEY` and talks to Stripe; the Revenue page asks the API for `GET /stripe/status` with the logged-in admin's token (the API checks the token and the admin role) and shows whether the connection works, its mode (test or live) and the account's public identity. A live key is refused by the API unless `STRIPE_ALLOW_LIVE=yes`. Needs `API_BASE_URL` on this deployment.
 
+### Subscriptions (Premium, CHF 10.00 per month, tax included)
+
+Set up once, in this order:
+
+1. Apply `API/supabase/migrations/20261013200000_billing_plans_payments.sql` in the Supabase SQL editor (plans, billing customers, payments, Stripe events). It seeds the `free` and `premium` plans.
+2. On the Revenue page, once Stripe is connected: **Create the plans in Stripe** (creates the product and the price; safe to repeat).
+3. In Stripe (test mode) > Developers > Webhooks > Add endpoint: URL `https://<the API>/stripe/webhook`, events `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `charge.refunded`. Copy the **signing secret** (`whsec_…`) into Render as `STRIPE_WEBHOOK_SECRET`.
+4. In Render also set `CHECKOUT_RETURN_BASE_URL` to the listener app's address (where Stripe sends the customer back).
+5. Test with the card `4242 4242 4242 4242` (any future date, any code): the subscription, the payment (with its tax and Stripe fee) and the events show up on the Revenue page.
+
+Events are only a trigger: the API re-reads the object from Stripe before writing, so the API version chosen for the endpoint does not matter. Tax is recorded only if Stripe computes it (`STRIPE_AUTOMATIC_TAX=on`, which needs Stripe Tax to be set up); otherwise payments show a tax of 0.
+
 ## Access control
 
 - `src/middleware.ts` refreshes the session and sends anonymous visitors to `/login`. It is **not** the security boundary.
