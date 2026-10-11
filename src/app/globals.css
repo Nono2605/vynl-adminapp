@@ -1139,3 +1139,13 @@ audio {
   font-size: 0.875rem;
   overflow-wrap: anywhere;
 }
+
+/* Historique replié (déclarations antérieures d'un morceau). */
+.history summary {
+  cursor: pointer;
+  color: var(--vynl-texte-2);
+  font-size: 0.875rem;
+}
+.history summary:hover {
+  color: var(--vynl-texte);
+}

@@ -159,6 +159,77 @@ export default async function TrackReviewPage({
     .map((result) => result.error?.message)
     .filter(Boolean);
 
+  // Déclarations : la plus récente fait foi. Une déclaration identique à celle qui la suit
+  // (plus récente) n'est qu'un « Save » répété : on la masque. Ne restent dans
+  // l'historique que les vrais changements.
+  // Un refus n'est jamais masqué : deux enregistrements identiques dont un seul est refusé restent visibles.
+  const sameContent = (a: DeclarationRow, b: DeclarationRow) =>
+    (a.status === "rejected") === (b.status === "rejected") &&
+    a.provenance === b.provenance &&
+    (a.description ?? null) === (b.description ?? null) &&
+    JSON.stringify(a.ai_tool_names ?? null) === JSON.stringify(b.ai_tool_names ?? null);
+  const latestDeclaration = declarationRows[0] ?? null;
+  const earlierChanges = declarationRows.slice(1).filter((declaration, index) => !sameContent(declaration, declarationRows[index]));
+  const resaves = declarationRows.length - (latestDeclaration ? 1 : 0) - earlierChanges.length;
+
+  const declarationCard = (declaration: DeclarationRow, isLatest: boolean) => {
+    const rejected = declaration.status === "rejected";
+    const note = reviewNotes.get(declaration.id);
+    return (
+      <article key={declaration.id} className="dash-card">
+        <div className="page-head" style={{ marginBottom: "var(--space-xs)" }}>
+          <span style={{ display: "inline-flex", gap: "var(--space-xs)", alignItems: "center" }}>
+            <strong>{declaration.provenance}</strong>
+            {rejected && <StatusBadge status="rejected" />}
+            {isLatest && <span className="muted">latest</span>}
+          </span>
+          <span className="muted">Declared {formatDateTime(declaration.declared_at)}</span>
+        </div>
+        <dl className="kv">
+          <dt>AI tools</dt>
+          <dd>{declaration.ai_tool_names?.length ? declaration.ai_tool_names.join(", ") : "—"}</dd>
+          <dt>Description</dt>
+          <dd>{declaration.description ?? "—"}</dd>
+          {rejected && note && (
+            <>
+              <dt>Rejected because</dt>
+              <dd>{note}</dd>
+            </>
+          )}
+        </dl>
+        {isLatest && (
+          <div style={{ marginTop: "var(--space-sm)" }}>
+            {rejected ? (
+              <ActionForm action={reviewDeclaration} submitLabel="Withdraw the rejection" pendingLabel="Saving…" tone="secondary">
+                <input type="hidden" name="declarationId" value={declaration.id} />
+                <input type="hidden" name="decision" value="reinstate" />
+              </ActionForm>
+            ) : (
+              <ActionForm
+                action={reviewDeclaration}
+                submitLabel="Reject declaration"
+                pendingLabel="Saving…"
+                tone="danger"
+                confirm="Reject this declaration? The track cannot be published as declared."
+              >
+                <input type="hidden" name="declarationId" value={declaration.id} />
+                <input type="hidden" name="decision" value="reject" />
+                <textarea
+                  name="note"
+                  required
+                  minLength={3}
+                  maxLength={500}
+                  placeholder="Why is it rejected? (the creator can read it)"
+                  className="input-field"
+                />
+              </ActionForm>
+            )}
+          </div>
+        )}
+      </article>
+    );
+  };
+
   // La file n'est lue qu'en mode file d'attente.
   const queue = flow ? await loadQueue("tracks") : null;
 
@@ -454,71 +525,24 @@ export default async function TrackReviewPage({
         <p className="muted" style={{ marginBottom: "var(--space-sm)" }}>
           Declared by the creator. No review is needed to publish. Reject the latest declaration only to block the track.
         </p>
-        {declarationRows.length === 0 && <p className="muted">The creator has not declared how this track was made.</p>}
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
-          {declarationRows.map((declaration, index) => {
-            const rejected = declaration.status === "rejected";
-            const note = reviewNotes.get(declaration.id);
-            return (
-              <article key={declaration.id} className="dash-card">
-                <div className="page-head" style={{ marginBottom: "var(--space-xs)" }}>
-                  <span style={{ display: "inline-flex", gap: "var(--space-xs)", alignItems: "center" }}>
-                    <strong>{declaration.provenance}</strong>
-                    {rejected && <StatusBadge status="rejected" />}
-                    {index === 0 && <span className="muted">latest</span>}
-                  </span>
-                  <span className="muted">Declared {formatDateTime(declaration.declared_at)}</span>
-                </div>
-                <dl className="kv">
-                  <dt>AI tools</dt>
-                  <dd>{declaration.ai_tool_names?.length ? declaration.ai_tool_names.join(", ") : "—"}</dd>
-                  <dt>Description</dt>
-                  <dd>{declaration.description ?? "—"}</dd>
-                  {rejected && note && (
-                    <>
-                      <dt>Rejected because</dt>
-                      <dd>{note}</dd>
-                    </>
-                  )}
-                </dl>
-                {index === 0 && (
-                  <div style={{ marginTop: "var(--space-sm)" }}>
-                    {rejected ? (
-                      <ActionForm
-                        action={reviewDeclaration}
-                        submitLabel="Withdraw the rejection"
-                        pendingLabel="Saving…"
-                        tone="secondary"
-                      >
-                        <input type="hidden" name="declarationId" value={declaration.id} />
-                        <input type="hidden" name="decision" value="reinstate" />
-                      </ActionForm>
-                    ) : (
-                      <ActionForm
-                        action={reviewDeclaration}
-                        submitLabel="Reject declaration"
-                        pendingLabel="Saving…"
-                        tone="danger"
-                        confirm="Reject this declaration? The track cannot be published as declared."
-                      >
-                        <input type="hidden" name="declarationId" value={declaration.id} />
-                        <input type="hidden" name="decision" value="reject" />
-                        <textarea
-                          name="note"
-                          required
-                          minLength={3}
-                          maxLength={500}
-                          placeholder="Why is it rejected? (the creator can read it)"
-                          className="input-field"
-                        />
-                      </ActionForm>
-                    )}
-                  </div>
-                )}
-              </article>
-            );
-          })}
-        </div>
+        {latestDeclaration ? (
+          declarationCard(latestDeclaration, true)
+        ) : (
+          <p className="muted">The creator has not declared how this track was made.</p>
+        )}
+        {earlierChanges.length > 0 && (
+          <details className="history" style={{ marginTop: "var(--space-sm)" }}>
+            <summary>Earlier declarations ({earlierChanges.length})</summary>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", marginTop: "var(--space-sm)" }}>
+              {earlierChanges.map((declaration) => declarationCard(declaration, false))}
+            </div>
+          </details>
+        )}
+        {resaves > 0 && (
+          <p className="muted" style={{ marginTop: "var(--space-xs)" }}>
+            {resaves} identical re-save{resaves > 1 ? "s" : ""} hidden (the creator saved the same declaration again).
+          </p>
+        )}
       </section>
 
       <section className="section-gap">
