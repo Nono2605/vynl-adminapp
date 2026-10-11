@@ -200,7 +200,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                     <td>
                       {declaration ? (
                         <span style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center" }}>
-                          {declaration.provenance} <StatusBadge status={declaration.status} />
+                          {declaration.provenance} {declaration.status === "rejected" && <StatusBadge status="rejected" />}
                         </span>
                       ) : (
                         <span className="muted">None</span>

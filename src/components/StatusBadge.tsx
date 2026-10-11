@@ -15,7 +15,6 @@ const VARIANTS: Record<string, string> = {
   trialing: "status--warn",
   trial: "status--warn",
   past_due: "status--warn",
-  pending_review: "status--warn",
   pending: "status--warn",
   processing: "status--warn",
   suspended: "status--warn",

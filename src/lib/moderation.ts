@@ -7,7 +7,8 @@
 // comme un contrôle de plus, avec le même état « ok / warn / fail » : un « fail »
 // bloque la publication.
 
-export type DeclarationState = "none" | "pending_review" | "approved" | "rejected";
+// Une déclaration IA est « déclarée » par le créateur, ou « rejected » si un admin l'a écartée.
+export type DeclarationState = "none" | "declared" | "rejected";
 export type CheckState = "ok" | "warn" | "fail";
 
 export interface Check {
@@ -25,9 +26,12 @@ export interface TrackCheckInput {
   splitsTotal: number | null;
 }
 
+// Seul « rejected » compte ; tout autre statut est « declared ». Cela couvre aussi les
+// anciens statuts (pending_review, approved) tant que la migration
+// 20261011100000_ai_declaration_simplify.sql n'est pas appliquée.
 export function declarationState(latest: { status: string } | null | undefined): DeclarationState {
   if (!latest) return "none";
-  return latest.status === "approved" || latest.status === "rejected" ? latest.status : "pending_review";
+  return latest.status === "rejected" ? "rejected" : "declared";
 }
 
 // Décision de produit (11 oct. 2026) : la déclaration IA n'a PAS à être relue pour
@@ -50,9 +54,8 @@ export function trackChecks(input: TrackCheckInput): Check[] {
   );
 
   const declaration: Record<DeclarationState, Check> = {
-    approved: { key: "declaration", label: "AI declaration", state: "ok", detail: "Approved" },
+    declared: { key: "declaration", label: "AI declaration", state: "ok", detail: "Declared by the creator (no review needed to publish)" },
     none: { key: "declaration", label: "AI declaration", state: "warn", detail: "The creator has not declared how this track was made" },
-    pending_review: { key: "declaration", label: "AI declaration", state: "ok", detail: "Declared by the creator (no review needed to publish)" },
     rejected: { key: "declaration", label: "AI declaration", state: "fail", detail: "Rejected: the track cannot be published as declared" },
   };
   checks.push(declaration[input.declaration]);

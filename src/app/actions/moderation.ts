@@ -148,14 +148,19 @@ export async function reviewAlbum(_state: ActionState | undefined, formData: For
   });
 }
 
+// Une déclaration IA n'est plus relue : le créateur déclare, c'est tout. L'admin ne
+// s'en sert que dans un cas exceptionnel : REFUSER la déclaration (le morceau ne peut
+// plus être publié tant qu'elle tient, motif obligatoire que le créateur lit), ou
+// RETIRER ce refus. Seule la dernière déclaration d'un morceau compte, donc seule
+// elle peut être refusée ou rétablie. Qui, quand et pourquoi : dans le journal d'audit.
 export async function reviewDeclaration(_state: ActionState | undefined, formData: FormData): Promise<ActionState> {
   return actionResult(async () => {
     const admin = await requireAdmin();
     const declarationId = formUuid(formData, "declarationId");
     const verdict = formText(formData, "decision");
-    if (verdict !== "approve" && verdict !== "reject") throw new ActionError("Invalid decision.");
+    if (verdict !== "reject" && verdict !== "reinstate") throw new ActionError("Invalid decision.");
     const note = formReason(formData, "note", verdict === "reject");
-    const next = verdict === "approve" ? "approved" : "rejected";
+    const reject = verdict === "reject";
 
     const db = supabaseAdmin();
     const { data: declaration, error } = await db
@@ -165,33 +170,53 @@ export async function reviewDeclaration(_state: ActionState | undefined, formDat
       .maybeSingle();
     ensure(error, "Could not read the declaration");
     if (!declaration) throw new ActionError("Declaration not found.");
-    if (declaration.status !== "pending_review") {
-      throw new ActionError(`This declaration is already ${declaration.status.replace("_", " ")}. Reload the page.`);
+
+    // Seule la dernière déclaration du morceau fait foi (voir loadTrackChecks).
+    const { data: latest, error: latestError } = await db
+      .from("ai_declarations")
+      .select("id")
+      .eq("track_id", declaration.track_id)
+      .order("declared_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    ensure(latestError, "Could not read the track's declarations");
+    if (latest?.id !== declaration.id) {
+      throw new ActionError("Only the latest declaration of a track can be rejected or reinstated.");
     }
+
+    const isRejected = declaration.status === "rejected";
+    if (reject && isRejected) throw new ActionError("This declaration is already rejected. Reload the page.");
+    if (!reject && !isRejected) throw new ActionError("This declaration is not rejected. Reload the page.");
 
     const trackRelation = declaration.tracks as { title: string } | { title: string }[] | null;
     const title = (Array.isArray(trackRelation) ? trackRelation[0] : trackRelation)?.title;
 
     return runAudited(
       admin,
-      `ai_declaration.${verdict}`,
+      reject ? "ai_declaration.reject" : "ai_declaration.reinstate",
       { type: "ai_declaration", id: declaration.id, label: title },
-      { note: note || undefined, track_id: declaration.track_id, from: "pending_review", to: next },
+      {
+        note: note || undefined,
+        track_id: declaration.track_id,
+        from: isRejected ? "rejected" : "declared",
+        to: reject ? "rejected" : "declared",
+      },
       async () => {
-        const { data, error: updateError } = await db
+        const update = db
           .from("ai_declarations")
-          .update({
-            status: next,
-            reviewed_by: admin.id,
-            reviewed_at: new Date().toISOString(),
-            review_note: note || null,
-          })
-          .eq("id", declaration.id)
-          .eq("status", "pending_review")
-          .select("id");
+          .update(reject ? { status: "rejected", review_note: note } : { status: "declared", review_note: null })
+          .eq("id", declaration.id);
+        // Garde de concurrence : on ne change que depuis l'état lu plus haut.
+        const { data, error: updateError } = await (reject ? update.neq("status", "rejected") : update.eq("status", "rejected")).select("id");
+
+        if (updateError?.message.includes("enum")) {
+          throw new ActionError(
+            "The database still uses the old declaration statuses: apply supabase/migrations/20261011100000_ai_declaration_simplify.sql first."
+          );
+        }
         ensure(updateError, "The database refused the change");
         if (data?.length !== 1) throw new ActionError("The declaration changed in the meantime. Reload the page.");
-        return { message: `Declaration ${next}.` };
+        return { message: reject ? "Declaration rejected: the track cannot be published as declared." : "Rejection withdrawn." };
       }
     );
   });

@@ -8,7 +8,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
   const db = supabaseAdmin();
   const selectable = async (table: string, columns: string) => !(await db.from(table).select(columns).limit(0)).error;
 
-  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers] =
+  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified] =
     await Promise.all([
       selectable("admin_audit_log", "id, outcome"),
       selectable("tracks", "rejection_reason"),
@@ -36,11 +36,20 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
         selectable("tracks", "catalog_code, archived_reason"),
         selectable("track_files", "purged_at"),
       ]).then((r) => r.every(Boolean)),
+      // Le type énuméré n'accepte « declared » qu'après la simplification des déclarations IA.
+      db
+        .from("ai_declarations")
+        .select("id")
+        .eq("status", "declared")
+        .limit(0)
+        .then((result) => !result.error),
     ]);
 
   return {
     // Migration de l'admin (supabase/migrations/20261010100000_admin_actions.sql)
     admin_actions: adminAuditLog && trackReasons && albumReasons && declarationNotes,
+    // Migration de l'admin (supabase/migrations/20261011100000_ai_declaration_simplify.sql)
+    ai_declaration_simplified: simplified,
     // Migrations de l'API (API/supabase/migrations)
     integrity_guards: integrity,
     listening_entitlement_and_plays: plays && heartbeats,

@@ -7,16 +7,15 @@ const ready: TrackCheckInput = { durationSeconds: 215, fileCount: 1, declaration
 const blocking = (overrides: Partial<TrackCheckInput>) => blockers(trackChecks({ ...ready, ...overrides })).map((c) => c.key);
 
 describe("publication : déclaration IA", () => {
-  it("une déclaration EN ATTENTE de relecture ne bloque pas la publication (décision du 11 oct.)", () => {
-    assert.deepEqual(blocking({ declaration: "pending_review" }), []);
+  it("une déclaration du créateur ne bloque pas la publication, sans relecture (décision du 11 oct.)", () => {
+    assert.deepEqual(blocking({ declaration: "declared" }), []);
+    const check = trackChecks({ ...ready, declaration: "declared" }).find((c) => c.key === "declaration")!;
+    assert.equal(check.state, "ok");
   });
   it("sans déclaration : avertissement seulement, pas de blocage", () => {
     assert.deepEqual(blocking({ declaration: "none" }), []);
     const check = trackChecks({ ...ready, declaration: "none" }).find((c) => c.key === "declaration")!;
     assert.equal(check.state, "warn");
-  });
-  it("déclaration approuvée : ok", () => {
-    assert.deepEqual(blocking({ declaration: "approved" }), []);
   });
   it("déclaration REFUSÉE par un administrateur : bloque toujours (décision explicite)", () => {
     assert.deepEqual(blocking({ declaration: "rejected" }), ["declaration"]);
@@ -31,17 +30,20 @@ describe("publication : les autres contrôles restent bloquants", () => {
   });
   it("répartitions qui ne font pas 100 %", () => assert.deepEqual(blocking({ splitsTotal: 90 }), ["splits"]));
   it("répartitions à 100 % : ok", () => assert.deepEqual(blocking({ splitsTotal: 100 }), []));
-  it("une déclaration en attente ne masque pas un autre problème", () => {
-    assert.deepEqual(blocking({ declaration: "pending_review", fileCount: 0 }), ["audio"]);
+  it("une déclaration ne masque pas un autre problème", () => {
+    assert.deepEqual(blocking({ declaration: "declared", fileCount: 0 }), ["audio"]);
   });
 });
 
 describe("declarationState / sumSplits", () => {
-  it("le statut de la dernière déclaration donne l'état", () => {
+  it("seul « rejected » compte : tout autre statut est « declared »", () => {
     assert.equal(declarationState(null), "none");
-    assert.equal(declarationState({ status: "approved" }), "approved");
+    assert.equal(declarationState({ status: "declared" }), "declared");
     assert.equal(declarationState({ status: "rejected" }), "rejected");
-    assert.equal(declarationState({ status: "pending_review" }), "pending_review");
+  });
+  it("les anciens statuts (avant la migration) comptent comme « declared »", () => {
+    assert.equal(declarationState({ status: "pending_review" }), "declared");
+    assert.equal(declarationState({ status: "approved" }), "declared");
   });
   it("somme des parts, null s'il n'y en a pas", () => {
     assert.equal(sumSplits(null), null);
