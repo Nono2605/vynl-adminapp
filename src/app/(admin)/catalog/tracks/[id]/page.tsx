@@ -5,10 +5,13 @@ import { ActionForm } from "@/components/ActionForm";
 import { AuditTrail } from "@/components/AuditTrail";
 import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
+import { ReviewFlowBar } from "@/components/ReviewFlow";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format";
 import { blockers, declarationState, sumSplits, trackChecks } from "@/lib/moderation";
-import { first, isUuid } from "@/lib/query";
+import { first, isUuid, pick, type SearchParams } from "@/lib/query";
+import { loadQueue, skipPath } from "@/lib/reviewQueue";
+import { positionOf } from "@/lib/reviewQueueLogic";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -48,11 +51,21 @@ function formatSize(bytes: number | null): string {
   return bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(Math.round(bytes / 1024), 1)} KB`;
 }
 
-export default async function TrackReviewPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TrackReviewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<SearchParams>;
+}) {
   await requireAdmin();
 
   const { id } = await params;
   if (!isUuid(id)) notFound();
+
+  // ?flow=1 : mode file d'attente. Décider (accepter / refuser) ouvre l'élément suivant.
+  const query = await searchParams;
+  const flow = pick(query, "flow") === "1";
 
   const db = supabaseAdmin();
 
@@ -147,14 +160,45 @@ export default async function TrackReviewPage({ params }: { params: Promise<{ id
     .map((result) => result.error?.message)
     .filter(Boolean);
 
+  // La file n'est lue qu'en mode file d'attente.
+  const queue = flow ? await loadQueue("tracks") : null;
+
   return (
     <>
-      <p className="muted">
-        <Link href="/catalog" className="text-link">
-          Catalog
-        </Link>{" "}
-        / {row.title}
-      </p>
+      {flow ? (
+        <p className="muted">
+          <Link href="/moderation" className="text-link">
+            Moderation
+          </Link>{" "}
+          / tracks in review / {row.title}
+        </p>
+      ) : (
+        <p className="muted">
+          <Link href="/catalog" className="text-link">
+            Catalog
+          </Link>{" "}
+          / {row.title}
+        </p>
+      )}
+
+      {flow && queue && (
+        <ReviewFlowBar
+          kind="tracks"
+          currentId={row.id}
+          position={positionOf(queue.ids, row.id)}
+          total={queue.total}
+          lastDecision={pick(query, "last")}
+          lastTitle={pick(query, "lastTitle")}
+        />
+      )}
+      {flow && row.status !== "in_review" && (
+        <Notice>
+          This track is no longer waiting for review.{" "}
+          <Link href={skipPath("tracks", row.id)} prefetch={false} className="text-link">
+            Open the next one
+          </Link>
+        </Notice>
+      )}
       <PageHead title={row.title} plain>
         <span style={{ display: "inline-flex", gap: "var(--space-xs)" }}>
           <StatusBadge status={row.status} />
@@ -207,10 +251,11 @@ export default async function TrackReviewPage({ params }: { params: Promise<{ id
                   action={reviewTrack}
                   submitLabel="Approve and publish"
                   pendingLabel="Publishing…"
-                  confirm={`Publish "${row.title}"? It becomes visible to every listener.`}
+                  confirm={flow ? undefined : `Publish "${row.title}"? It becomes visible to every listener.`}
                 >
                   <input type="hidden" name="trackId" value={row.id} />
                   <input type="hidden" name="decision" value="approve" />
+                  {flow && <input type="hidden" name="flow" value="1" />}
                 </ActionForm>
               )}
               <div>
@@ -220,10 +265,11 @@ export default async function TrackReviewPage({ params }: { params: Promise<{ id
                   submitLabel="Refuse and send back"
                   pendingLabel="Sending…"
                   tone="danger"
-                  confirm={`Send "${row.title}" back to draft? The creator will see your reason.`}
+                  confirm={flow ? undefined : `Send "${row.title}" back to draft? The creator will see your reason.`}
                 >
                   <input type="hidden" name="trackId" value={row.id} />
                   <input type="hidden" name="decision" value="refuse" />
+                  {flow && <input type="hidden" name="flow" value="1" />}
                   <textarea
                     name="reason"
                     required

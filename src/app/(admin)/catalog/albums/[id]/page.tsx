@@ -5,9 +5,12 @@ import { ActionForm } from "@/components/ActionForm";
 import { AuditTrail } from "@/components/AuditTrail";
 import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
+import { ReviewFlowBar } from "@/components/ReviewFlow";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format";
-import { first, isUuid } from "@/lib/query";
+import { first, isUuid, pick, type SearchParams } from "@/lib/query";
+import { loadQueue, skipPath } from "@/lib/reviewQueue";
+import { positionOf } from "@/lib/reviewQueueLogic";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -20,11 +23,21 @@ interface AlbumTrack {
   duration_seconds: number | null;
 }
 
-export default async function AlbumReviewPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AlbumReviewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<SearchParams>;
+}) {
   await requireAdmin();
 
   const { id } = await params;
   if (!isUuid(id)) notFound();
+
+  // ?flow=1 : mode file d'attente. Décider (accepter / refuser) ouvre l'élément suivant.
+  const query = await searchParams;
+  const flow = pick(query, "flow") === "1";
 
   const db = supabaseAdmin();
 
@@ -63,14 +76,45 @@ export default async function AlbumReviewPage({ params }: { params: Promise<{ id
   const rejectionReason = (rejection.data as { rejection_reason: string | null } | null)?.rejection_reason ?? null;
   const canPublish = trackRows.length > 0;
 
+  // La file n'est lue qu'en mode file d'attente.
+  const queue = flow ? await loadQueue("albums") : null;
+
   return (
     <>
-      <p className="muted">
-        <Link href="/catalog?view=albums" className="text-link">
-          Catalog
-        </Link>{" "}
-        / {row.title}
-      </p>
+      {flow ? (
+        <p className="muted">
+          <Link href="/moderation" className="text-link">
+            Moderation
+          </Link>{" "}
+          / albums in review / {row.title}
+        </p>
+      ) : (
+        <p className="muted">
+          <Link href="/catalog?view=albums" className="text-link">
+            Catalog
+          </Link>{" "}
+          / {row.title}
+        </p>
+      )}
+
+      {flow && queue && (
+        <ReviewFlowBar
+          kind="albums"
+          currentId={row.id}
+          position={positionOf(queue.ids, row.id)}
+          total={queue.total}
+          lastDecision={pick(query, "last")}
+          lastTitle={pick(query, "lastTitle")}
+        />
+      )}
+      {flow && row.status !== "in_review" && (
+        <Notice>
+          This album is no longer waiting for review.{" "}
+          <Link href={skipPath("albums", row.id)} prefetch={false} className="text-link">
+            Open the next one
+          </Link>
+        </Notice>
+      )}
       <PageHead title={row.title} plain>
         <span style={{ display: "inline-flex", gap: "var(--space-xs)" }}>
           <StatusBadge status={row.status} />
@@ -120,10 +164,11 @@ export default async function AlbumReviewPage({ params }: { params: Promise<{ id
                   action={reviewAlbum}
                   submitLabel="Approve and publish"
                   pendingLabel="Publishing…"
-                  confirm={`Publish "${row.title}"?`}
+                  confirm={flow ? undefined : `Publish "${row.title}"?`}
                 >
                   <input type="hidden" name="albumId" value={row.id} />
                   <input type="hidden" name="decision" value="approve" />
+                  {flow && <input type="hidden" name="flow" value="1" />}
                 </ActionForm>
               ) : (
                 <Notice>An album with no tracks cannot be published.</Notice>
@@ -135,10 +180,11 @@ export default async function AlbumReviewPage({ params }: { params: Promise<{ id
                   submitLabel="Refuse and send back"
                   pendingLabel="Sending…"
                   tone="danger"
-                  confirm={`Send "${row.title}" back to draft? The creator will see your reason.`}
+                  confirm={flow ? undefined : `Send "${row.title}" back to draft? The creator will see your reason.`}
                 >
                   <input type="hidden" name="albumId" value={row.id} />
                   <input type="hidden" name="decision" value="refuse" />
+                  {flow && <input type="hidden" name="flow" value="1" />}
                   <textarea
                     name="reason"
                     required

@@ -50,6 +50,7 @@ What can be done:
 
 - **Users:** suspend / reactivate (sets `users.status` and a Supabase Auth ban; the API also refuses non-active accounts), change role (admin rights need the email typed to confirm), set a temporary password (shown once, never stored). You cannot act on your own account.
 - **Publications:** a track or album in review is approved (published) or refused (back to draft, with a reason the creator can read); a published one can be archived and an archived one restored. Publishing a track re-checks the audio file, duration, AI declaration and splits server-side.
+- **Review queue:** on `/moderation`, "Review one by one" opens the oldest track (or album) in queue mode (`?flow=1`). Publishing or refusing it opens the next one automatically, "Skip" moves on without deciding, and the queue ends back on `/moderation`. Tracks and albums have separate queues, oldest first. Queue mode skips the browser confirmation on approve/refuse.
 - **AI declarations:** approve or reject (a rejection needs a note).
 - **Plays and fraud:** open a play to see its signals and heartbeats, then exclude it (`counted = false` with an `admin: …` reason, never deleted) or count it again. Fraud events can be resolved or reopened. A play that falls in a closed royalty period (`closed`, `computed`, `published`) cannot be changed. Nothing detects fraud automatically yet: the fraud tables are filled by a detection job that does not exist.
 

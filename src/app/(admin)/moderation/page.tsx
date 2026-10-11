@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
+import { LastDecision } from "@/components/ReviewFlow";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDateTime, formatDuration } from "@/lib/format";
 import { declarationState, sumSplits, trackChecks } from "@/lib/moderation";
-import { embeddedCount, first } from "@/lib/query";
+import { embeddedCount, first, oneOf, pick, type SearchParams } from "@/lib/query";
+import { QUEUE_KINDS, QUEUE_LABEL, reviewPath, skipPath } from "@/lib/reviewQueue";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -43,8 +45,12 @@ interface Decision {
   details: { reason?: string; to?: string } | null;
 }
 
-export default async function ModerationPage() {
+export default async function ModerationPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requireAdmin();
+
+  // Arrivée depuis le mode file d'attente quand il n'y a plus rien à relire.
+  const params = await searchParams;
+  const done = oneOf(pick(params, "done"), QUEUE_KINDS);
 
   const db = supabaseAdmin();
 
@@ -85,14 +91,32 @@ export default async function ModerationPage() {
 
       {errors.length > 0 && <Notice>Some queues could not be loaded: {errors[0]}</Notice>}
 
+      {done && (
+        <section className="dash-card" style={{ marginBottom: "var(--space-sm)" }}>
+          <h2 className="section-title">All caught up</h2>
+          <p className="muted">No more {QUEUE_LABEL[done].toLowerCase()} are waiting for a decision.</p>
+          <LastDecision decision={pick(params, "last")} title={pick(params, "lastTitle")} />
+        </section>
+      )}
+
       <div className="stat-grid">
         <StatCard label="Tracks in review" value={count(tracks)} warn />
         <StatCard label="Albums in review" value={count(albums)} warn />
       </div>
 
-      <h2 className="section-title section-gap">New tracks waiting for a decision</h2>
+      <div className="page-head section-gap" style={{ marginBottom: "var(--space-xs)" }}>
+        <h2 className="section-title" style={{ marginBottom: 0 }}>
+          New tracks waiting for a decision
+        </h2>
+        {trackRows.length > 0 && (
+          <Link href={skipPath("tracks")} prefetch={false} className="btn btn-primary btn-sm">
+            Review one by one ({count(tracks) ?? trackRows.length})
+          </Link>
+        )}
+      </div>
       <p className="muted" style={{ marginBottom: "var(--space-sm)" }}>
-        Oldest first. Open a track to listen to it, read its declaration, then publish it or send it back with a reason.
+        Oldest first. “Review one by one” opens the oldest track and moves on to the next as soon as you publish or refuse
+        one. You can also open a single track from the list.
       </p>
       <div className="table-wrap">
         <table className="table">
@@ -126,7 +150,7 @@ export default async function ModerationPage() {
               return (
                 <tr key={track.id}>
                   <td className="cell-main">
-                    <Link href={`/catalog/tracks/${track.id}`} className="text-link">
+                    <Link href={reviewPath("tracks", track.id)} className="text-link">
                       {track.title}
                     </Link>
                   </td>
@@ -151,7 +175,7 @@ export default async function ModerationPage() {
                     )}
                   </td>
                   <td>
-                    <Link href={`/catalog/tracks/${track.id}`} className="btn btn-secondary btn-sm">
+                    <Link href={reviewPath("tracks", track.id)} className="btn btn-secondary btn-sm">
                       Review
                     </Link>
                   </td>
@@ -163,7 +187,16 @@ export default async function ModerationPage() {
       </div>
       {(tracks.count ?? 0) > QUEUE_LIMIT && <p className="muted">Showing the {QUEUE_LIMIT} oldest of {tracks.count}.</p>}
 
-      <h2 className="section-title section-gap">New albums waiting for a decision</h2>
+      <div className="page-head section-gap" style={{ marginBottom: "var(--space-xs)" }}>
+        <h2 className="section-title" style={{ marginBottom: 0 }}>
+          New albums waiting for a decision
+        </h2>
+        {albumRows.length > 0 && (
+          <Link href={skipPath("albums")} prefetch={false} className="btn btn-primary btn-sm">
+            Review one by one ({count(albums) ?? albumRows.length})
+          </Link>
+        )}
+      </div>
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -187,7 +220,7 @@ export default async function ModerationPage() {
             {albumRows.map((album) => (
               <tr key={album.id}>
                 <td className="cell-main">
-                  <Link href={`/catalog/albums/${album.id}`} className="text-link">
+                  <Link href={reviewPath("albums", album.id)} className="text-link">
                     {album.title}
                   </Link>
                 </td>
@@ -196,7 +229,7 @@ export default async function ModerationPage() {
                 <td className="num">{embeddedCount(album.tracks)}</td>
                 <td>{formatDateTime(album.updated_at)}</td>
                 <td>
-                  <Link href={`/catalog/albums/${album.id}`} className="btn btn-secondary btn-sm">
+                  <Link href={reviewPath("albums", album.id)} className="btn btn-secondary btn-sm">
                     Review
                   </Link>
                 </td>

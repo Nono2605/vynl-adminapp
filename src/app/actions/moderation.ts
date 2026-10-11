@@ -10,6 +10,7 @@ import {
   runAudited,
 } from "@/lib/actions";
 import type { ActionState } from "@/lib/actionTypes";
+import { advanceAfterDecision } from "@/lib/reviewQueue";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { loadTrackChecks } from "@/lib/trackReview";
@@ -32,6 +33,13 @@ function parseDecision(formData: FormData): Decision {
   const value = formText(formData, "decision");
   if (!(value in DECISIONS)) throw new ActionError("Invalid decision.");
   return value as Decision;
+}
+
+// En mode file d'attente (formulaire envoyé depuis ?flow=1), accepter ou refuser
+// ouvre directement l'élément suivant. Archiver / rétablir ne font pas partie de
+// la file : on reste sur la fiche.
+function inQueueFlow(formData: FormData, decision: Decision): boolean {
+  return formText(formData, "flow") === "1" && (decision === "approve" || decision === "refuse");
 }
 
 const DONE: Record<Decision, string> = {
@@ -65,7 +73,7 @@ export async function reviewTrack(_state: ActionState | undefined, formData: For
     };
     if (decision === "approve") updates.published_by = admin.id;
 
-    return runAudited(
+    const result = await runAudited(
       admin,
       `track.${decision}`,
       { type: "track", id: track.id, label: track.title },
@@ -82,6 +90,12 @@ export async function reviewTrack(_state: ActionState | undefined, formData: For
         return { message: `"${track.title}" ${DONE[decision]}.` };
       }
     );
+
+    // Seulement si la décision a bien été prise : une erreur reste affichée sur la fiche.
+    if (result.ok && inQueueFlow(formData, decision)) {
+      await advanceAfterDecision("tracks", track.id, decision, track.title);
+    }
+    return result;
   });
 }
 
@@ -109,7 +123,7 @@ export async function reviewAlbum(_state: ActionState | undefined, formData: For
       throw new ActionError("An album with no tracks cannot be published.");
     }
 
-    return runAudited(
+    const result = await runAudited(
       admin,
       `album.${decision}`,
       { type: "album", id: row.id, label: row.title },
@@ -126,6 +140,11 @@ export async function reviewAlbum(_state: ActionState | undefined, formData: For
         return { message: `"${row.title}" ${DONE[decision]}.` };
       }
     );
+
+    if (result.ok && inQueueFlow(formData, decision)) {
+      await advanceAfterDecision("albums", row.id, decision, row.title);
+    }
+    return result;
   });
 }
 
