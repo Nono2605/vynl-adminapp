@@ -17,11 +17,10 @@ export default async function OverviewPage() {
   const head = { count: "exact", head: true } as const;
   const since7Days = daysAgo(7).toISOString();
 
-  const [creators, published, inReview, pendingAi, plays7d, openFraud, subscriptions] = await Promise.all([
+  const [creators, published, inReview, plays7d, openFraud, subscriptions] = await Promise.all([
     db.from("users").select("id", head).eq("role", "creator"),
     db.from("tracks").select("id", head).eq("status", "published"),
     db.from("tracks").select("id", head).eq("status", "in_review"),
-    db.from("ai_declarations").select("id", head).eq("status", "pending_review"),
     db.from("plays").select("id", head).eq("counted", true).gte("started_at", since7Days),
     db.from("fraud_events").select("id", head).eq("resolved", false),
     getSubscriptionBreakdown(),
@@ -29,7 +28,7 @@ export default async function OverviewPage() {
 
   const count = (result: { count: number | null; error: { message: string } | null }) =>
     result.error ? null : result.count;
-  const errors = [creators, published, inReview, pendingAi, plays7d, openFraud]
+  const errors = [creators, published, inReview, plays7d, openFraud]
     .map((result) => result.error?.message)
     .concat(subscriptions.error)
     .filter(Boolean);
@@ -57,7 +56,6 @@ export default async function OverviewPage() {
         <StatCard label="Creators" value={count(creators)} />
         <StatCard label="Published tracks" value={count(published)} />
         <StatCard label="Tracks in review" value={count(inReview)} warn />
-        <StatCard label="AI declarations pending" value={count(pendingAi)} warn />
       </div>
 
       <h2 className="section-title section-gap">Listening</h2>

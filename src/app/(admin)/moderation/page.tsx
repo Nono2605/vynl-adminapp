@@ -31,18 +31,6 @@ interface QueuedAlbum {
   tracks: { count: number }[];
 }
 
-interface PendingDeclaration {
-  id: string;
-  track_id: string;
-  provenance: string;
-  ai_tool_names: string[] | null;
-  declared_at: string;
-  tracks:
-    | { title: string; status: string; artists: { name: string } | { name: string }[] | null }
-    | { title: string; status: string; artists: { name: string } | { name: string }[] | null }[]
-    | null;
-}
-
 interface Decision {
   id: string;
   created_at: string;
@@ -60,7 +48,7 @@ export default async function ModerationPage() {
 
   const db = supabaseAdmin();
 
-  const [tracks, albums, declarations, decisions] = await Promise.all([
+  const [tracks, albums, decisions] = await Promise.all([
     db
       .from("tracks")
       .select(
@@ -77,14 +65,6 @@ export default async function ModerationPage() {
       .order("updated_at", { ascending: true })
       .limit(QUEUE_LIMIT),
     db
-      .from("ai_declarations")
-      .select("id, track_id, provenance, ai_tool_names, declared_at, tracks(title, status, artists(name))", {
-        count: "exact",
-      })
-      .eq("status", "pending_review")
-      .order("declared_at", { ascending: true })
-      .limit(QUEUE_LIMIT),
-    db
       .from("admin_audit_log")
       .select("id, created_at, admin_email, action, target_type, target_id, target_label, outcome, details")
       .in("target_type", ["track", "album", "ai_declaration"])
@@ -94,10 +74,9 @@ export default async function ModerationPage() {
 
   const trackRows = (tracks.data ?? []) as unknown as QueuedTrack[];
   const albumRows = (albums.data ?? []) as unknown as QueuedAlbum[];
-  const declarationRows = (declarations.data ?? []) as unknown as PendingDeclaration[];
   const decisionRows = (decisions.data ?? []) as unknown as Decision[];
 
-  const errors = [tracks, albums, declarations].map((result) => result.error?.message).filter(Boolean);
+  const errors = [tracks, albums].map((result) => result.error?.message).filter(Boolean);
   const count = (result: { count: number | null; error: unknown }) => (result.error ? null : result.count);
 
   return (
@@ -109,7 +88,6 @@ export default async function ModerationPage() {
       <div className="stat-grid">
         <StatCard label="Tracks in review" value={count(tracks)} warn />
         <StatCard label="Albums in review" value={count(albums)} warn />
-        <StatCard label="AI declarations pending" value={count(declarations)} warn />
       </div>
 
       <h2 className="section-title section-gap">New tracks waiting for a decision</h2>
@@ -224,53 +202,6 @@ export default async function ModerationPage() {
                 </td>
               </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
-
-      <h2 className="section-title section-gap">AI declarations waiting for review</h2>
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Track</th>
-              <th>Artist</th>
-              <th>Declared as</th>
-              <th>AI tools</th>
-              <th>Declared</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {declarationRows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="empty">
-                  No declaration waiting.
-                </td>
-              </tr>
-            )}
-            {declarationRows.map((declaration) => {
-              const track = first(declaration.tracks);
-              return (
-                <tr key={declaration.id}>
-                  <td className="cell-main">
-                    <Link href={`/catalog/tracks/${declaration.track_id}`} className="text-link">
-                      {track?.title ?? declaration.track_id}
-                    </Link>{" "}
-                    {track && <StatusBadge status={track.status} />}
-                  </td>
-                  <td>{first(track?.artists)?.name ?? "—"}</td>
-                  <td>{declaration.provenance}</td>
-                  <td className="cell-main">{declaration.ai_tool_names?.length ? declaration.ai_tool_names.join(", ") : "—"}</td>
-                  <td>{formatDateTime(declaration.declared_at)}</td>
-                  <td>
-                    <Link href={`/catalog/tracks/${declaration.track_id}`} className="btn btn-secondary btn-sm">
-                      Review
-                    </Link>
-                  </td>
-                </tr>
-              );
-            })}
           </tbody>
         </table>
       </div>
