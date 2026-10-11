@@ -8,7 +8,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
   const db = supabaseAdmin();
   const selectable = async (table: string, columns: string) => !(await db.from(table).select(columns).limit(0)).error;
 
-  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats] =
+  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers] =
     await Promise.all([
       selectable("admin_audit_log", "id, outcome"),
       selectable("tracks", "rejection_reason"),
@@ -28,6 +28,14 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
           p_to: "2000-01-02T00:00:00Z",
         })
         .then((result) => !result.error),
+      // Numéros de catalogue + anonymisation (colonnes posées par 20261011000000) ; les
+      // triggers, eux, ne se voient pas d'ici.
+      Promise.all([
+        selectable("artists", "catalog_code, name_key, anonymized_at"),
+        selectable("albums", "catalog_code, archived_reason"),
+        selectable("tracks", "catalog_code, archived_reason"),
+        selectable("track_files", "purged_at"),
+      ]).then((r) => r.every(Boolean)),
     ]);
 
   return {
@@ -39,6 +47,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
     creator_onboarding: onboarding,
     listener_preferences: preferences,
     creator_stats: stats,
+    catalog_numbers_and_artist_names: numbers,
   };
 }
 

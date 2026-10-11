@@ -60,7 +60,7 @@ export default async function TrackReviewPage({ params }: { params: Promise<{ id
     db
       .from("tracks")
       .select(
-        "id, title, slug, status, explicit, track_number, duration_seconds, isrc, published_at, published_by, created_at, updated_at, artists(id, name, slug), albums(id, title)"
+        "id, catalog_code, title, slug, status, explicit, track_number, duration_seconds, isrc, published_at, published_by, created_at, updated_at, artists(id, catalog_code, name, slug), albums(id, catalog_code, title)"
       )
       .eq("id", id)
       .maybeSingle(),
@@ -90,6 +90,7 @@ export default async function TrackReviewPage({ params }: { params: Promise<{ id
 
   const row = track.data as unknown as {
     id: string;
+    catalog_code: string | null;
     title: string;
     slug: string;
     status: string;
@@ -101,8 +102,8 @@ export default async function TrackReviewPage({ params }: { params: Promise<{ id
     published_by: string | null;
     created_at: string;
     updated_at: string;
-    artists: { id: string; name: string; slug: string } | { id: string; name: string; slug: string }[] | null;
-    albums: { id: string; title: string } | { id: string; title: string }[] | null;
+    artists: { id: string; catalog_code: string | null; name: string; slug: string } | { id: string; catalog_code: string | null; name: string; slug: string }[] | null;
+    albums: { id: string; catalog_code: string | null; title: string } | { id: string; catalog_code: string | null; title: string }[] | null;
   };
   const artist = first(row.artists);
   const album = first(row.albums);
@@ -321,12 +322,17 @@ export default async function TrackReviewPage({ params }: { params: Promise<{ id
         <section className="dash-card">
           <h2 className="section-title">Details</h2>
           <dl className="kv">
+            <dt>Catalog number</dt>
+            <dd>{row.catalog_code ?? "—"}</dd>
             <dt>Artist</dt>
             <dd>
               {artist ? (
-                <Link href={`/catalog?artist=${artist.id}`} className="text-link">
-                  {artist.name}
-                </Link>
+                <>
+                  <Link href={`/catalog?artist=${artist.id}`} className="text-link">
+                    {artist.name}
+                  </Link>{" "}
+                  <span className="muted">{artist.catalog_code}</span>
+                </>
               ) : (
                 "—"
               )}
@@ -334,9 +340,12 @@ export default async function TrackReviewPage({ params }: { params: Promise<{ id
             <dt>Album</dt>
             <dd>
               {album ? (
-                <Link href={`/catalog/albums/${album.id}`} className="text-link">
-                  {album.title}
-                </Link>
+                <>
+                  <Link href={`/catalog/albums/${album.id}`} className="text-link">
+                    {album.title}
+                  </Link>{" "}
+                  <span className="muted">{album.catalog_code}</span>
+                </>
               ) : (
                 "Single"
               )}

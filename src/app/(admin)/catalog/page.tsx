@@ -14,6 +14,7 @@ const STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
 interface TrackRow {
   id: string;
+  catalog_code: string | null;
   title: string;
   status: string;
   explicit: boolean;
@@ -28,6 +29,7 @@ interface TrackRow {
 
 interface AlbumRow {
   id: string;
+  catalog_code: string | null;
   title: string;
   type: string;
   status: string;
@@ -65,12 +67,12 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
       ? db
           .from("tracks")
           .select(
-            "id, title, status, explicit, duration_seconds, published_at, created_at, artists(id, name), albums(title), track_files(count), ai_declarations(status, provenance)",
+            "id, catalog_code, title, status, explicit, duration_seconds, published_at, created_at, artists(id, name), albums(title), track_files(count), ai_declarations(status, provenance)",
             { count: "exact" }
           )
       : db
           .from("albums")
-          .select("id, title, type, status, release_date, created_at, artists(id, name), tracks(count)", {
+          .select("id, catalog_code, title, type, status, release_date, created_at, artists(id, name), tracks(count)", {
             count: "exact",
           });
   listQuery = listQuery.order("created_at", { ascending: false }).range(from, to);
@@ -151,6 +153,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
           <table className="table">
             <thead>
               <tr>
+                <th>Number</th>
                 <th>Title</th>
                 <th>Artist</th>
                 <th>Album</th>
@@ -164,7 +167,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
             <tbody>
               {(list.data ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={8} className="empty">
+                  <td colSpan={9} className="empty">
                     No tracks match.
                   </td>
                 </tr>
@@ -174,6 +177,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                 const declaration = track.ai_declarations?.[0];
                 return (
                   <tr key={track.id}>
+                    <td className="muted">{track.catalog_code ?? "—"}</td>
                     <td className="cell-main">
                       <Link href={`/catalog/tracks/${track.id}`} className="text-link">
                         {track.title}
@@ -214,6 +218,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
           <table className="table">
             <thead>
               <tr>
+                <th>Number</th>
                 <th>Title</th>
                 <th>Artist</th>
                 <th>Type</th>
@@ -226,7 +231,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
             <tbody>
               {(list.data ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty">
+                  <td colSpan={8} className="empty">
                     No albums match.
                   </td>
                 </tr>
@@ -235,6 +240,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                 const albumArtist = first(album.artists);
                 return (
                   <tr key={album.id}>
+                    <td className="muted">{album.catalog_code ?? "—"}</td>
                     <td className="cell-main">
                       <Link href={`/catalog/albums/${album.id}`} className="text-link">
                         {album.title}

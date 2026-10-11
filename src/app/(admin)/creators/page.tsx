@@ -19,6 +19,7 @@ interface Onboarding {
 
 interface ArtistRow {
   id: string;
+  catalog_code: string | null;
   user_id: string | null;
   name: string;
   slug: string;
@@ -46,7 +47,7 @@ export default async function CreatorsPage({ searchParams }: { searchParams: Pro
   let query = db
     .from("artists")
     .select(
-      "id, user_id, name, slug, country, verified, created_at, users(email, creator_onboarding(content_provenance, owns_rights)), tracks(count), albums(count), follows(count)",
+      "id, catalog_code, user_id, name, slug, country, verified, created_at, users(email, creator_onboarding(content_provenance, owns_rights)), tracks(count), albums(count), follows(count)",
       { count: "exact" }
     )
     .order("created_at", { ascending: false })
@@ -143,7 +144,10 @@ export default async function CreatorsPage({ searchParams }: { searchParams: Pro
                     <Link href={`/catalog?artist=${artist.id}`} className="text-link">
                       {artist.name}
                     </Link>{" "}
-                    <span className="muted">/{artist.slug}</span>
+                    <span className="muted">
+                      /{artist.slug}
+                      {artist.catalog_code ? ` · ${artist.catalog_code}` : ""}
+                    </span>
                   </td>
                   <td className="cell-main">
                     {artist.user_id && account ? (

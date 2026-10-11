@@ -13,6 +13,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 interface AlbumTrack {
   id: string;
+  catalog_code: string | null;
   title: string;
   status: string;
   track_number: number | null;
@@ -30,12 +31,12 @@ export default async function AlbumReviewPage({ params }: { params: Promise<{ id
   const [album, tracks, rejection] = await Promise.all([
     db
       .from("albums")
-      .select("id, title, slug, type, status, release_date, created_at, updated_at, artists(id, name)")
+      .select("id, catalog_code, title, slug, type, status, release_date, created_at, updated_at, artists(id, catalog_code, name)")
       .eq("id", id)
       .maybeSingle(),
     db
       .from("tracks")
-      .select("id, title, status, track_number, duration_seconds")
+      .select("id, catalog_code, title, status, track_number, duration_seconds")
       .eq("album_id", id)
       .order("track_number", { ascending: true, nullsFirst: false }),
     // Colonne ajoutée par la migration des actions d'admin : lue à part.
@@ -47,6 +48,7 @@ export default async function AlbumReviewPage({ params }: { params: Promise<{ id
 
   const row = album.data as unknown as {
     id: string;
+    catalog_code: string | null;
     title: string;
     slug: string;
     type: string;
@@ -54,7 +56,7 @@ export default async function AlbumReviewPage({ params }: { params: Promise<{ id
     release_date: string | null;
     created_at: string;
     updated_at: string;
-    artists: { id: string; name: string } | { id: string; name: string }[] | null;
+    artists: { id: string; catalog_code: string | null; name: string } | { id: string; catalog_code: string | null; name: string }[] | null;
   };
   const artist = first(row.artists);
   const trackRows = (tracks.data ?? []) as AlbumTrack[];
@@ -88,6 +90,8 @@ export default async function AlbumReviewPage({ params }: { params: Promise<{ id
         <section className="dash-card">
           <h2 className="section-title">Details</h2>
           <dl className="kv">
+            <dt>Catalog number</dt>
+            <dd>{row.catalog_code ?? "—"}</dd>
             <dt>Artist</dt>
             <dd>
               {artist ? (
@@ -202,6 +206,7 @@ export default async function AlbumReviewPage({ params }: { params: Promise<{ id
               <tr>
                 <th className="num">#</th>
                 <th>Title</th>
+                <th>Catalog number</th>
                 <th>Status</th>
                 <th className="num">Duration</th>
               </tr>
@@ -209,7 +214,7 @@ export default async function AlbumReviewPage({ params }: { params: Promise<{ id
             <tbody>
               {trackRows.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="empty">
+                  <td colSpan={5} className="empty">
                     No tracks in this album.
                   </td>
                 </tr>
@@ -222,6 +227,7 @@ export default async function AlbumReviewPage({ params }: { params: Promise<{ id
                       {track.title}
                     </Link>
                   </td>
+                  <td className="muted">{track.catalog_code ?? "—"}</td>
                   <td>
                     <StatusBadge status={track.status} />
                   </td>
