@@ -100,6 +100,8 @@ export async function GET() {
     NEXT_PUBLIC_SUPABASE_URL: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: Boolean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),
     SUPABASE_SECRET_KEY: Boolean(process.env.SUPABASE_SECRET_KEY),
+    // Adresse de l'API Vynl (page Revenue : état de la connexion Stripe).
+    API_BASE_URL: Boolean(process.env.API_BASE_URL),
   };
 
   let database: "ok" | "error" | "skipped" = "skipped";

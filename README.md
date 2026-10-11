@@ -19,6 +19,7 @@ npm run dev                  # http://localhost:3002
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase > Project Settings > API | yes |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | same | yes |
 | `SUPABASE_SECRET_KEY` | same (secret key) | **never** |
+| `API_BASE_URL` | the Vynl API on Render (e.g. `https://…onrender.com`, no trailing slash) | no (server only) |
 
 The tables have row level security enabled and no policies, so the secret key is the only way in. It is only read by `src/lib/supabase/admin.ts`, which imports `server-only` so the build fails if a Client Component ever pulls it in.
 
@@ -66,6 +67,10 @@ What can be done:
 ## Privacy
 
 Consent and retention live in the API's database (migration `API/supabase/migrations/20261013000000_privacy_consents_and_retention.sql`, applied in the Supabase SQL editor): a `consents` table where each decision is a new row that is never modified, and `privacy_retention_run` / `privacy_retention_preview` to delete raw heartbeats and clear IP fingerprints older than 30 days (not scheduled until the durations are confirmed). A user's page shows their recorded decisions. `GET /api/health` reports `privacy_consents_and_retention`.
+
+## Stripe
+
+This admin holds **no Stripe key**. The API (Render) holds `STRIPE_SECRET_KEY` and talks to Stripe; the Revenue page asks the API for `GET /stripe/status` with the logged-in admin's token (the API checks the token and the admin role) and shows whether the connection works, its mode (test or live) and the account's public identity. A live key is refused by the API unless `STRIPE_ALLOW_LIVE=yes`. Needs `API_BASE_URL` on this deployment.
 
 ## Access control
 
