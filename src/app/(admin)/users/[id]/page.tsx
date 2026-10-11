@@ -22,7 +22,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
   const db = supabaseAdmin();
   const head = { count: "exact", head: true } as const;
 
-  const [user, profile, subscriptions, artists, onboarding, playlists, library, follows, playsTotal, fraud] =
+  const [user, profile, subscriptions, artists, onboarding, playlists, library, follows, playsTotal, fraud, consents] =
     await Promise.all([
       db.from("users").select("id, email, role, status, created_at, updated_at").eq("id", id).maybeSingle(),
       db
@@ -51,6 +51,13 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
         .eq("user_id", id)
         .order("detected_at", { ascending: false })
         .limit(5),
+      // Décisions de vie privée de ce compte (table de l'API, migration 20261013000000).
+      db
+        .from("consents")
+        .select("id, purpose, granted, policy_version, source, created_at")
+        .eq("user_id", id)
+        .order("created_at", { ascending: false })
+        .limit(20),
     ]);
 
   if (user.error) throw new Error(`Could not load the user: ${user.error.message}`);
@@ -81,6 +88,14 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
     primary_genre: string | null;
   } | null;
   const artistRows = (artists.data ?? []) as { id: string; name: string; slug: string; verified: boolean }[];
+  const consentRows = (consents.data ?? []) as {
+    id: string;
+    purpose: string;
+    granted: boolean;
+    policy_version: string;
+    source: string;
+    created_at: string;
+  }[];
   const fraudRows = (fraud.data ?? []) as { id: string; event_type: string; severity: string; detected_at: string; resolved: boolean }[];
 
   const errors = [profile, subscriptions, artists, onboarding, fraud]
@@ -328,6 +343,47 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
         <Link href={`/users/${account.id}/listening`} className="btn btn-secondary btn-sm" prefetch={false}>
           Open the listening history
         </Link>
+      </section>
+
+      <section className="section-gap">
+        <h2 className="section-title">Privacy decisions</h2>
+        {consents.error ? (
+          <Notice>
+            Not available yet ({consents.error.message}). Apply the privacy migration of the API in the Supabase SQL editor.
+          </Notice>
+        ) : (
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Purpose</th>
+                  <th>Decision</th>
+                  <th>Text version</th>
+                  <th>From</th>
+                </tr>
+              </thead>
+              <tbody>
+                {consentRows.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="empty">
+                      No decision recorded: this account has not been through the welcome screen.
+                    </td>
+                  </tr>
+                )}
+                {consentRows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{formatDateTime(row.created_at)}</td>
+                    <td>{row.purpose.replace(/_/g, " ")}</td>
+                    <td>{row.granted ? <StatusBadge status="approved" /> : <StatusBadge status="rejected" />}</td>
+                    <td>{row.policy_version}</td>
+                    <td>{row.source}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {fraudRows.length > 0 && (

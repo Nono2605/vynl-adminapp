@@ -8,7 +8,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
   const db = supabaseAdmin();
   const selectable = async (table: string, columns: string) => !(await db.from(table).select(columns).limit(0)).error;
 
-  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics] =
+  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics, privacyConsents, privacyRetention] =
     await Promise.all([
       selectable("admin_audit_log", "id, outcome"),
       selectable("tracks", "rejection_reason"),
@@ -47,6 +47,10 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
       db
         .rpc("admin_stats_data_quality", { p_from: "2000-01-01T00:00:00Z", p_to: "2000-01-02T00:00:00Z" })
         .then((result) => !result.error),
+      // Consentements (API/supabase/migrations/20261013000000_privacy_consents_and_retention.sql).
+      selectable("consents", "id, purpose, granted, policy_version"),
+      // L'aperçu de la purge ne modifie rien : on l'appelle pour tester que la fonction existe.
+      db.rpc("privacy_retention_preview").then((result) => !result.error),
     ]);
 
   return {
@@ -57,6 +61,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
     // Migration de l'admin (supabase/migrations/20261011200000_admin_analytics.sql)
     admin_analytics: analytics,
     // Migrations de l'API (API/supabase/migrations)
+    privacy_consents_and_retention: privacyConsents && privacyRetention,
     integrity_guards: integrity,
     listening_entitlement_and_plays: plays && heartbeats,
     creator_onboarding: onboarding,

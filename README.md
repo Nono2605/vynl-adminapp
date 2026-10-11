@@ -63,6 +63,10 @@ What can be done:
 - Everything is aggregated: no page lists people. The only individual view is one account's listening history (`/users/[id]/listening`): opening it writes an entry to the audit log first, and nothing is shown if the log is unavailable.
 - `GET /api/health` also reports whether production plays actually carry a country, device and IP fingerprint (`collection`), to catch a broken collection early.
 
+## Privacy
+
+Consent and retention live in the API's database (migration `API/supabase/migrations/20261013000000_privacy_consents_and_retention.sql`, applied in the Supabase SQL editor): a `consents` table where each decision is a new row that is never modified, and `privacy_retention_run` / `privacy_retention_preview` to delete raw heartbeats and clear IP fingerprints older than 30 days (not scheduled until the durations are confirmed). A user's page shows their recorded decisions. `GET /api/health` reports `privacy_consents_and_retention`.
+
 ## Access control
 
 - `src/middleware.ts` refreshes the session and sends anonymous visitors to `/login`. It is **not** the security boundary.
