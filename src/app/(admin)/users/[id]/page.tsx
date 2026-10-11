@@ -7,22 +7,11 @@ import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
-import { formatDate, formatDateTime, formatDuration } from "@/lib/format";
-import { first, isUuid } from "@/lib/query";
+import { formatDate, formatDateTime } from "@/lib/format";
+import { isUuid } from "@/lib/query";
 import { requireAdmin } from "@/lib/session";
 import { tierOf } from "@/lib/subscription";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-
-interface PlayRow {
-  id: string;
-  started_at: string;
-  validated_seconds: number;
-  qualified: boolean;
-  counted: boolean;
-  excluded_reason: string | null;
-  tracks: { title: string } | { title: string }[] | null;
-  artists: { name: string } | { name: string }[] | null;
-}
 
 export default async function UserPage({ params }: { params: Promise<{ id: string }> }) {
   const admin = await requireAdmin();
@@ -33,7 +22,7 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
   const db = supabaseAdmin();
   const head = { count: "exact", head: true } as const;
 
-  const [user, profile, subscriptions, artists, onboarding, playlists, library, follows, playsTotal, recentPlays, fraud] =
+  const [user, profile, subscriptions, artists, onboarding, playlists, library, follows, playsTotal, fraud] =
     await Promise.all([
       db.from("users").select("id, email, role, status, created_at, updated_at").eq("id", id).maybeSingle(),
       db
@@ -56,12 +45,6 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
       db.from("library").select("id", head).eq("user_id", id),
       db.from("follows").select("id", head).eq("follower_id", id),
       db.from("plays").select("id", head).eq("user_id", id),
-      db
-        .from("plays")
-        .select("id, started_at, validated_seconds, qualified, counted, excluded_reason, tracks(title), artists(name)")
-        .eq("user_id", id)
-        .order("started_at", { ascending: false })
-        .limit(10),
       db
         .from("fraud_events")
         .select("id, event_type, severity, detected_at, resolved")
@@ -98,10 +81,9 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
     primary_genre: string | null;
   } | null;
   const artistRows = (artists.data ?? []) as { id: string; name: string; slug: string; verified: boolean }[];
-  const plays = (recentPlays.data ?? []) as unknown as PlayRow[];
   const fraudRows = (fraud.data ?? []) as { id: string; event_type: string; severity: string; detected_at: string; resolved: boolean }[];
 
-  const errors = [profile, subscriptions, artists, onboarding, recentPlays, fraud]
+  const errors = [profile, subscriptions, artists, onboarding, fraud]
     .map((result) => result.error?.message)
     .filter(Boolean);
   const count = (result: { count: number | null; error: { message: string } | null }) =>
@@ -337,45 +319,15 @@ export default async function UserPage({ params }: { params: Promise<{ id: strin
         </section>
       )}
 
-      <section className="section-gap">
-        <h2 className="section-title">Recent plays</h2>
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>Track</th>
-                <th>Artist</th>
-                <th className="num">Listened</th>
-                <th>Counted</th>
-              </tr>
-            </thead>
-            <tbody>
-              {plays.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="empty">
-                    No plays yet.
-                  </td>
-                </tr>
-              )}
-              {plays.map((play) => (
-                <tr key={play.id}>
-                  <td>
-                    <Link href={`/plays/${play.id}`} className="text-link">
-                      {formatDateTime(play.started_at)}
-                    </Link>
-                  </td>
-                  <td className="cell-main">{first(play.tracks)?.title ?? "—"}</td>
-                  <td>{first(play.artists)?.name ?? "—"}</td>
-                  <td className="num">{formatDuration(play.validated_seconds)}</td>
-                  <td>
-                    {play.counted ? (play.qualified ? "Qualified" : "Yes") : `Excluded${play.excluded_reason ? `: ${play.excluded_reason}` : ""}`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <section className="dash-card section-gap">
+        <h2 className="section-title">Listening history</h2>
+        <p className="muted" style={{ marginBottom: "var(--space-sm)" }}>
+          What this account listens to is personal data. Opening the full history is recorded in the audit log (admin, account,
+          time).
+        </p>
+        <Link href={`/users/${account.id}/listening`} className="btn btn-secondary btn-sm" prefetch={false}>
+          Open the listening history
+        </Link>
       </section>
 
       {fraudRows.length > 0 && (

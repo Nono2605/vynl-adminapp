@@ -8,7 +8,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
   const db = supabaseAdmin();
   const selectable = async (table: string, columns: string) => !(await db.from(table).select(columns).limit(0)).error;
 
-  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified] =
+  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics] =
     await Promise.all([
       selectable("admin_audit_log", "id, outcome"),
       selectable("tracks", "rejection_reason"),
@@ -43,6 +43,10 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
         .eq("status", "declared")
         .limit(0)
         .then((result) => !result.error),
+      // Fonctions d'analytics de l'admin (une fenêtre vide suffit : on teste l'existence).
+      db
+        .rpc("admin_stats_data_quality", { p_from: "2000-01-01T00:00:00Z", p_to: "2000-01-02T00:00:00Z" })
+        .then((result) => !result.error),
     ]);
 
   return {
@@ -50,6 +54,8 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
     admin_actions: adminAuditLog && trackReasons && albumReasons && declarationNotes,
     // Migration de l'admin (supabase/migrations/20261011100000_ai_declaration_simplify.sql)
     ai_declaration_simplified: simplified,
+    // Migration de l'admin (supabase/migrations/20261011200000_admin_analytics.sql)
+    admin_analytics: analytics,
     // Migrations de l'API (API/supabase/migrations)
     integrity_guards: integrity,
     listening_entitlement_and_plays: plays && heartbeats,
@@ -58,6 +64,23 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
     creator_stats: stats,
     catalog_numbers_and_artist_names: numbers,
   };
+}
+
+// Est-ce que la collecte remplit vraiment pays, appareil et empreinte d'IP en production ?
+// Un booléen par colonne (au moins une écoute en porte une) : aucune valeur, aucun compte.
+async function collectionChecks(): Promise<Record<string, boolean>> {
+  const db = supabaseAdmin();
+  const seen = async (column: string) => {
+    const { data, error } = await db.from("plays").select("id").not(column, "is", null).limit(1);
+    return !error && (data?.length ?? 0) > 0;
+  };
+  const [country, device, ipHash, source] = await Promise.all([
+    seen("country_code"),
+    seen("device_type"),
+    seen("ip_hash"),
+    seen("source_context"),
+  ]);
+  return { plays_with_country: country, plays_with_device: device, plays_with_ip_hash: ipHash, plays_with_source: source };
 }
 
 export const dynamic = "force-dynamic";
@@ -76,18 +99,19 @@ export async function GET() {
 
   let database: "ok" | "error" | "skipped" = "skipped";
   let schema: Record<string, boolean> | undefined;
+  let collection: Record<string, boolean> | undefined;
 
   if (env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SECRET_KEY) {
     try {
       const { error } = await supabaseAdmin().from("users").select("id", { count: "exact", head: true });
       if (error) console.error(`Health check: database read failed: ${error.message}`);
       database = error ? "error" : "ok";
-      if (!error) schema = await schemaChecks();
+      if (!error) [schema, collection] = await Promise.all([schemaChecks(), collectionChecks()]);
     } catch (err) {
       console.error("Health check: database read threw", err);
       database = "error";
     }
   }
 
-  return NextResponse.json({ env, database, schema }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ env, database, schema, collection }, { headers: { "Cache-Control": "no-store" } });
 }

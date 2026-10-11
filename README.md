@@ -54,6 +54,15 @@ What can be done:
 - **AI declarations:** declared by the creator, no review needed to publish. An admin can reject the latest declaration of a track (it then blocks publishing, with a note the creator can read) and withdraw that rejection. Statuses are only `declared` and `rejected`: apply `supabase/migrations/20261011100000_ai_declaration_simplify.sql` once (it also drops `reviewed_by` / `reviewed_at`; who, when and why are in the audit log).
 - **Plays and fraud:** open a play to see its signals and heartbeats, then exclude it (`counted = false` with an `admin: …` reason, never deleted) or count it again. Fraud events can be resolved or reopened. A play that falls in a closed royalty period (`closed`, `computed`, `published`) cannot be changed. Nothing detects fraud automatically yet: the fraud tables are filled by a detection job that does not exist.
 
+## Analytics
+
+`/analytics` answers where, what and how much people listen: plays, listening time and listeners over a period (7/30/90 days or custom dates, always UTC), by artist, track, country, world region, device, source and listening plan. Filters live in the URL, so a link shares the exact view; the artists, countries and daily series export to CSV (text that looks like a formula is neutralised).
+
+- The figures come from SQL functions (`supabase/migrations/20261011200000_admin_analytics.sql`, apply it once; readable only with the secret key). Definitions match the Studio: a play counts once it has qualified (30 s listened), days are UTC, listeners are distinct accounts.
+- Geography stops at the country: the country comes from the visitor's IP as seen by the listener app (the address is never stored) and is not verified. World regions are derived from the country (`src/lib/geo.ts`, UN M49 plus the European Union and Switzerland). No city-level data is collected.
+- Everything is aggregated: no page lists people. The only individual view is one account's listening history (`/users/[id]/listening`): opening it writes an entry to the audit log first, and nothing is shown if the log is unavailable.
+- `GET /api/health` also reports whether production plays actually carry a country, device and IP fingerprint (`collection`), to catch a broken collection early.
+
 ## Access control
 
 - `src/middleware.ts` refreshes the session and sends anonymous visitors to `/login`. It is **not** the security boundary.

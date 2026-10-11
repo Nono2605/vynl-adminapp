@@ -112,6 +112,49 @@ export async function runAudited(
   }
 }
 
+// Accès à une donnée INDIVIDUELLE sensible (l'historique d'écoute d'un compte) : une
+// ligne du journal est écrite AVANT d'afficher, et si elle ne peut pas l'être (table
+// absente, base en panne) on n'affiche rien. Un même admin qui rouvre la même fiche
+// dans les 10 minutes ne crée pas une ligne de plus. Contrairement à runAudited, il n'y
+// a rien à modifier : la ligne naît directement « success ». Les agrégats (analytics)
+// ne passent pas par ici, ils ne désignent personne.
+const ACCESS_DEDUP_MS = 10 * 60 * 1000;
+
+export async function recordAccess(
+  admin: AdminUser,
+  action: string,
+  target: AuditTarget,
+  details: Record<string, unknown> = {}
+): Promise<void> {
+  const db = supabaseAdmin();
+  const unavailable = (message: string) =>
+    new ActionError(`The audit log is not available (${message}), so this history is not shown. ${MIGRATION_HINT}`);
+
+  const { data: recent, error: recentError } = await db
+    .from("admin_audit_log")
+    .select("id")
+    .eq("admin_id", admin.id)
+    .eq("action", action)
+    .eq("target_id", target.id)
+    .gte("created_at", new Date(Date.now() - ACCESS_DEDUP_MS).toISOString())
+    .limit(1);
+  if (recentError) throw unavailable(recentError.message);
+  if (recent && recent.length > 0) return;
+
+  const { error } = await db.from("admin_audit_log").insert({
+    admin_id: admin.id,
+    admin_email: admin.email,
+    action,
+    target_type: target.type,
+    target_id: target.id,
+    target_label: target.label ?? null,
+    details,
+    outcome: "success",
+    finished_at: new Date().toISOString(),
+  });
+  if (error) throw unavailable(error.message);
+}
+
 // --- Lecture des formulaires : tout vient du client, rien n'est fiable. ---
 
 export function formText(formData: FormData, key: string): string {

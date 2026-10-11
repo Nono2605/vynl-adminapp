@@ -49,6 +49,13 @@ const ICONS = {
       <path d="M8.75 12l2.5 2.5 4-4.5" />
     </svg>
   ),
+  analytics: (
+    <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+      <path d="M3.5 19.5h17" />
+      <path d="M5 15l4-5 3.5 3.5L19 6" />
+      <path d="M15.5 6H19v3.5" />
+    </svg>
+  ),
   plays: (
     <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
       <path d="M4 20V11" />
@@ -94,6 +101,7 @@ const NAV_ITEMS = [
   { href: "/catalog", label: "Catalog", icon: ICONS.catalog, desktopOnly: false },
   { href: "/moderation", label: "Moderation", icon: ICONS.moderation, desktopOnly: false },
   { href: "/subscriptions", label: "Subscriptions", icon: ICONS.subscriptions, desktopOnly: true },
+  { href: "/analytics", label: "Analytics", icon: ICONS.analytics, desktopOnly: true },
   { href: "/plays", label: "Plays", icon: ICONS.plays, desktopOnly: true },
   { href: "/revenue", label: "Revenue", icon: ICONS.revenue, desktopOnly: true },
   { href: "/payouts", label: "Payouts", icon: ICONS.payouts, desktopOnly: true },

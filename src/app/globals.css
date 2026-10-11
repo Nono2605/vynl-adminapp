@@ -1149,3 +1149,21 @@ audio {
 .history summary:hover {
   color: var(--vynl-texte);
 }
+
+/* Analytics : barre de part dans un tableau. */
+.share {
+  display: inline-block;
+  width: 100%;
+  min-width: 5rem;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--vynl-vinyle);
+  overflow: hidden;
+  vertical-align: middle;
+}
+.share__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--vynl-cyan);
+}

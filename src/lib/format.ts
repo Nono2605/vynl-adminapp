@@ -34,3 +34,17 @@ const dayFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "sho
 export function formatDay(value: Date): string {
   return dayFormat.format(value);
 }
+
+// Temps d'écoute lisible : 45 s, 12 min, 3.5 h.
+export function formatListening(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0 min";
+  if (seconds < 60) return `${Math.round(seconds)} s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} min`;
+  return `${(seconds / 3600).toLocaleString("en-US", { maximumFractionDigits: 1 })} h`;
+}
+
+// Part en pourcentage (« 12.5% »), « — » quand le total est nul.
+export function formatShare(part: number, whole: number): string {
+  if (!whole) return "—";
+  return `${((part / whole) * 100).toLocaleString("en-US", { maximumFractionDigits: 1 })}%`;
+}
