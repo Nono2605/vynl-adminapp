@@ -30,10 +30,10 @@ export function declarationState(latest: { status: string } | null | undefined):
   return latest.status === "approved" || latest.status === "rejected" ? latest.status : "pending_review";
 }
 
-// Décision de produit à confirmer : tant qu'une déclaration IA existe, elle doit
-// être approuvée pour publier ; un morceau SANS déclaration n'est qu'un
-// avertissement (les créateurs peuvent soumettre sans). Pour l'exiger, passer
-// le cas « none » en « fail » ci-dessous.
+// Décision de produit (11 oct. 2026) : la déclaration IA n'a PAS à être relue pour
+// publier. Une déclaration « en attente » ne bloque rien, et un morceau SANS déclaration
+// n'est qu'un avertissement. Seule une déclaration REFUSÉE par un administrateur bloque
+// encore la publication (c'est une décision explicite, pas une file d'attente).
 export function trackChecks(input: TrackCheckInput): Check[] {
   const checks: Check[] = [];
 
@@ -52,7 +52,7 @@ export function trackChecks(input: TrackCheckInput): Check[] {
   const declaration: Record<DeclarationState, Check> = {
     approved: { key: "declaration", label: "AI declaration", state: "ok", detail: "Approved" },
     none: { key: "declaration", label: "AI declaration", state: "warn", detail: "The creator has not declared how this track was made" },
-    pending_review: { key: "declaration", label: "AI declaration", state: "fail", detail: "Pending review: approve or reject it first" },
+    pending_review: { key: "declaration", label: "AI declaration", state: "ok", detail: "Declared by the creator (no review needed to publish)" },
     rejected: { key: "declaration", label: "AI declaration", state: "fail", detail: "Rejected: the track cannot be published as declared" },
   };
   checks.push(declaration[input.declaration]);

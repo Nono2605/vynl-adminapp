@@ -11,6 +11,7 @@
     "start": "next start -p 3002",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test": "node --test \"src/**/*.test.ts\"",
     "create-admin": "node --env-file=.env.local scripts/create-admin.mjs"
   },
   "dependencies": {
