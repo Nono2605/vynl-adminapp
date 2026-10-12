@@ -27,7 +27,7 @@ export async function loadTrackChecks(trackId: string): Promise<{ track: TrackFo
     db.from("track_files").select("id", { count: "exact", head: true }).eq("track_id", trackId),
     db
       .from("ai_declarations")
-      .select("status, declared_at")
+      .select("status, provenance, declared_at")
       .eq("track_id", trackId)
       .order("declared_at", { ascending: false })
       .limit(1),

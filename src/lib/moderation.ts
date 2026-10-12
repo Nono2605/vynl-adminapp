@@ -7,8 +7,18 @@
 // comme un contrôle de plus, avec le même état « ok / warn / fail » : un « fail »
 // bloque la publication.
 
-// Une déclaration IA est « déclarée » par le créateur, ou « rejected » si un admin l'a écartée.
-export type DeclarationState = "none" | "declared" | "rejected";
+// Provenances acceptées pendant la bêta (décision du 12 oct. 2026) : la plateforme est 100 % IA.
+// Un morceau déclaré « hybrid » est ENREGISTRÉ mais en attente (« held ») : il ne se publie pas
+// tant qu'on n'ouvre pas l'hybride. Changer cette liste est un changement de code, relu et testé,
+// pas un simple réglage : c'est une décision juridique (spec, section 15).
+export const ACCEPTED_PROVENANCES: readonly string[] = ["ai"];
+
+// Dernière déclaration IA du morceau :
+//  - « ai »       : déclaré 100 % IA, accepté ;
+//  - « held »     : déclaré autrement (hybrid, ou ancien « human ») : en attente ;
+//  - « none »     : aucune déclaration ;
+//  - « rejected » : un administrateur a écarté la déclaration.
+export type DeclarationState = "none" | "ai" | "held" | "rejected";
 export type CheckState = "ok" | "warn" | "fail";
 
 export interface Check {
@@ -26,18 +36,22 @@ export interface TrackCheckInput {
   splitsTotal: number | null;
 }
 
-// Seul « rejected » compte ; tout autre statut est « declared ». Cela couvre aussi les
-// anciens statuts (pending_review, approved) tant que la migration
-// 20261011100000_ai_declaration_simplify.sql n'est pas appliquée.
-export function declarationState(latest: { status: string } | null | undefined): DeclarationState {
+// Une déclaration écartée par un administrateur (« rejected ») l'emporte ; sinon la provenance
+// décide (le statut « pending_review » / « approved » des anciennes déclarations ne compte pas).
+// Une provenance absente ou inconnue est traitée comme « held » : en cas de doute, on ne publie pas.
+export function declarationState(
+  latest: { status: string; provenance?: string | null } | null | undefined
+): DeclarationState {
   if (!latest) return "none";
-  return latest.status === "rejected" ? "rejected" : "declared";
+  if (latest.status === "rejected") return "rejected";
+  return latest.provenance && ACCEPTED_PROVENANCES.includes(latest.provenance) ? "ai" : "held";
 }
 
-// Décision de produit (11 oct. 2026) : la déclaration IA n'a PAS à être relue pour
-// publier. Une déclaration « en attente » ne bloque rien, et un morceau SANS déclaration
-// n'est qu'un avertissement. Seule une déclaration REFUSÉE par un administrateur bloque
-// encore la publication (c'est une décision explicite, pas une file d'attente).
+// Décisions de produit :
+//  - 11 oct. 2026 : la déclaration IA n'a PAS à être relue par un administrateur pour publier.
+//  - 12 oct. 2026 : la bêta est 100 % IA. Seul un morceau déclaré « ai » se publie ; un morceau
+//    déclaré « hybrid » est en attente ; un morceau SANS déclaration ne se publie pas non plus
+//    (on ne sait pas ce qu'il est : avant, ce n'était qu'un avertissement).
 export function trackChecks(input: TrackCheckInput): Check[] {
   const checks: Check[] = [];
 
@@ -54,8 +68,19 @@ export function trackChecks(input: TrackCheckInput): Check[] {
   );
 
   const declaration: Record<DeclarationState, Check> = {
-    declared: { key: "declaration", label: "AI declaration", state: "ok", detail: "Declared by the creator (no review needed to publish)" },
-    none: { key: "declaration", label: "AI declaration", state: "warn", detail: "The creator has not declared how this track was made" },
+    ai: { key: "declaration", label: "AI declaration", state: "ok", detail: "Declared as AI-generated (no review needed to publish)" },
+    held: {
+      key: "declaration",
+      label: "AI declaration",
+      state: "fail",
+      detail: "Held: not declared as AI-generated. The beta accepts AI-generated music only; the track stays saved until other music is opened",
+    },
+    none: {
+      key: "declaration",
+      label: "AI declaration",
+      state: "fail",
+      detail: "No declaration: the beta publishes tracks declared as AI-generated only",
+    },
     rejected: { key: "declaration", label: "AI declaration", state: "fail", detail: "Rejected: the track cannot be published as declared" },
   };
   checks.push(declaration[input.declaration]);

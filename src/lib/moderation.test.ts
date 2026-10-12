@@ -1,24 +1,40 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { blockers, declarationState, sumSplits, trackChecks, type TrackCheckInput } from "./moderation.ts";
+import {
+  ACCEPTED_PROVENANCES,
+  blockers,
+  declarationState,
+  sumSplits,
+  trackChecks,
+  type TrackCheckInput,
+} from "./moderation.ts";
 
-// Un morceau en bon état : audio, durée, pas de répartition. Chaque test n'en change qu'un point.
-const ready: TrackCheckInput = { durationSeconds: 215, fileCount: 1, declaration: "none", splitsTotal: null };
+// Un morceau en bon état : audio, durée, déclaré 100 % IA, pas de répartition. Chaque test n'en change qu'un point.
+const ready: TrackCheckInput = { durationSeconds: 215, fileCount: 1, declaration: "ai", splitsTotal: null };
 const blocking = (overrides: Partial<TrackCheckInput>) => blockers(trackChecks({ ...ready, ...overrides })).map((c) => c.key);
+const declarationCheck = (declaration: TrackCheckInput["declaration"]) =>
+  trackChecks({ ...ready, declaration }).find((c) => c.key === "declaration")!;
 
-describe("publication : déclaration IA", () => {
-  it("une déclaration du créateur ne bloque pas la publication, sans relecture (décision du 11 oct.)", () => {
-    assert.deepEqual(blocking({ declaration: "declared" }), []);
-    const check = trackChecks({ ...ready, declaration: "declared" }).find((c) => c.key === "declaration")!;
-    assert.equal(check.state, "ok");
+describe("publication : la bêta est 100 % IA (décision du 12 oct. 2026)", () => {
+  it("un morceau déclaré « ai » se publie, sans relecture de la déclaration", () => {
+    assert.deepEqual(blocking({ declaration: "ai" }), []);
+    assert.equal(declarationCheck("ai").state, "ok");
   });
-  it("sans déclaration : avertissement seulement, pas de blocage", () => {
-    assert.deepEqual(blocking({ declaration: "none" }), []);
-    const check = trackChecks({ ...ready, declaration: "none" }).find((c) => c.key === "declaration")!;
-    assert.equal(check.state, "warn");
+  it("un morceau déclaré « hybrid » est EN ATTENTE : il bloque la publication", () => {
+    assert.deepEqual(blocking({ declaration: "held" }), ["declaration"]);
+    const check = declarationCheck("held");
+    assert.equal(check.state, "fail");
+    assert.match(check.detail, /Held/);
+  });
+  it("sans déclaration, un morceau ne se publie pas non plus", () => {
+    assert.deepEqual(blocking({ declaration: "none" }), ["declaration"]);
+    assert.equal(declarationCheck("none").state, "fail");
   });
   it("déclaration REFUSÉE par un administrateur : bloque toujours (décision explicite)", () => {
     assert.deepEqual(blocking({ declaration: "rejected" }), ["declaration"]);
+  });
+  it("seule la provenance « ai » est acceptée", () => {
+    assert.deepEqual([...ACCEPTED_PROVENANCES], ["ai"]);
   });
 });
 
@@ -30,21 +46,41 @@ describe("publication : les autres contrôles restent bloquants", () => {
   });
   it("répartitions qui ne font pas 100 %", () => assert.deepEqual(blocking({ splitsTotal: 90 }), ["splits"]));
   it("répartitions à 100 % : ok", () => assert.deepEqual(blocking({ splitsTotal: 100 }), []));
-  it("une déclaration ne masque pas un autre problème", () => {
-    assert.deepEqual(blocking({ declaration: "declared", fileCount: 0 }), ["audio"]);
+  it("une déclaration valide ne masque pas un autre problème", () => {
+    assert.deepEqual(blocking({ declaration: "ai", fileCount: 0 }), ["audio"]);
+  });
+  it("plusieurs problèmes sont tous signalés", () => {
+    assert.deepEqual(blocking({ declaration: "held", fileCount: 0 }), ["audio", "declaration"]);
   });
 });
 
-describe("declarationState / sumSplits", () => {
-  it("seul « rejected » compte : tout autre statut est « declared »", () => {
+describe("declarationState", () => {
+  it("aucune déclaration : none", () => {
     assert.equal(declarationState(null), "none");
-    assert.equal(declarationState({ status: "declared" }), "declared");
-    assert.equal(declarationState({ status: "rejected" }), "rejected");
+    assert.equal(declarationState(undefined), "none");
   });
-  it("les anciens statuts (avant la migration) comptent comme « declared »", () => {
-    assert.equal(declarationState({ status: "pending_review" }), "declared");
-    assert.equal(declarationState({ status: "approved" }), "declared");
+  it("provenance « ai » : ai, quel que soit l'ancien statut de la déclaration", () => {
+    assert.equal(declarationState({ status: "declared", provenance: "ai" }), "ai");
+    assert.equal(declarationState({ status: "pending_review", provenance: "ai" }), "ai");
+    assert.equal(declarationState({ status: "approved", provenance: "ai" }), "ai");
   });
+  it("hybrid, et l'ancien human : en attente", () => {
+    assert.equal(declarationState({ status: "declared", provenance: "hybrid" }), "held");
+    assert.equal(declarationState({ status: "declared", provenance: "human" }), "held");
+  });
+  it("provenance absente ou inconnue : en attente (dans le doute, on ne publie pas)", () => {
+    assert.equal(declarationState({ status: "declared" }), "held");
+    assert.equal(declarationState({ status: "declared", provenance: null }), "held");
+    assert.equal(declarationState({ status: "declared", provenance: "AI" }), "held");
+    assert.equal(declarationState({ status: "declared", provenance: "other" }), "held");
+  });
+  it("une déclaration REFUSÉE l'emporte sur la provenance", () => {
+    assert.equal(declarationState({ status: "rejected", provenance: "ai" }), "rejected");
+    assert.equal(declarationState({ status: "rejected", provenance: "hybrid" }), "rejected");
+  });
+});
+
+describe("sumSplits", () => {
   it("somme des parts, null s'il n'y en a pas", () => {
     assert.equal(sumSplits(null), null);
     assert.equal(sumSplits([]), null);

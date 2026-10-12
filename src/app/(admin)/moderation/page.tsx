@@ -20,7 +20,7 @@ interface QueuedTrack {
   updated_at: string;
   artists: { id: string; name: string } | { id: string; name: string }[] | null;
   track_files: { count: number }[];
-  ai_declarations: { status: string; declared_at: string }[] | null;
+  ai_declarations: { status: string; provenance: string; declared_at: string }[] | null;
   splits: { percentage: number | string }[] | null;
 }
 
@@ -58,7 +58,7 @@ export default async function ModerationPage({ searchParams }: { searchParams: P
     db
       .from("tracks")
       .select(
-        "id, title, duration_seconds, updated_at, artists(id, name), track_files(count), ai_declarations(status, declared_at), splits(percentage)",
+        "id, title, duration_seconds, updated_at, artists(id, name), track_files(count), ai_declarations(status, provenance, declared_at), splits(percentage)",
         { count: "exact" }
       )
       .eq("status", "in_review")
