@@ -6,12 +6,14 @@ import { AuditTrail } from "@/components/AuditTrail";
 import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
 import { ReviewFlowBar } from "@/components/ReviewFlow";
+import { ScanTable } from "@/components/ScanTable";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format";
 import { blockers, declarationState, sumSplits, trackChecks } from "@/lib/moderation";
 import { first, isUuid, pick, type SearchParams } from "@/lib/query";
 import { loadQueue, skipPath } from "@/lib/reviewQueue";
 import { positionOf } from "@/lib/reviewQueueLogic";
+import { SCAN_COLUMNS, isMissingTable, type ScanRow } from "@/lib/scans";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -154,6 +156,17 @@ export default async function TrackReviewPage({
   });
   const blocking = blockers(checks);
   const splitsTotal = sumSplits(splitRows);
+
+  // Journal des contrôles de contenu : la table n'existe qu'après la migration de l'API, la page marche sans.
+  const scanQuery = await db
+    .from("track_scans")
+    .select(SCAN_COLUMNS)
+    .eq("track_id", id)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  const scansMissing = isMissingTable(scanQuery.error);
+  const scanRows = (scanQuery.error ? [] : scanQuery.data) as unknown as ScanRow[];
+  const scansError = scanQuery.error && !scansMissing ? scanQuery.error.message : null;
 
   const errors = [files, declarations, splits, rights]
     .map((result) => result.error?.message)
@@ -542,6 +555,21 @@ export default async function TrackReviewPage({
           <p className="muted" style={{ marginTop: "var(--space-xs)" }}>
             {resaves} identical re-save{resaves > 1 ? "s" : ""} hidden (the creator saved the same declaration again).
           </p>
+        )}
+      </section>
+
+      <section className="section-gap">
+        <h2 className="section-title">Content checks</h2>
+        <p className="muted" style={{ marginBottom: "var(--space-sm)" }}>
+          Every automatic check on this track is kept here as proof of diligence. A refused upload leaves a line too.
+        </p>
+        {scansError && <Notice>Could not load the checks: {scansError}</Notice>}
+        {scansMissing ? (
+          <p className="muted">The check log is not set up yet: apply the latest migration of the API repository.</p>
+        ) : scanRows.length === 0 ? (
+          <p className="muted">No check recorded for this track.</p>
+        ) : (
+          <ScanTable scans={scanRows} />
         )}
       </section>
 

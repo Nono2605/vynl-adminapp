@@ -3,6 +3,10 @@
 // bleu pour un rôle, neutre pour un état de repos, pointillé pour ce qui est
 // terminé ou archivé. Un statut inconnu reste lisible (pointillé).
 const VARIANTS: Record<string, string> = {
+  // résultat d'un contrôle de contenu (journal des contrôles)
+  ok: "status--ok",
+  warn: "status--warn",
+  fail: "status--error",
   // succès
   active: "status--ok",
   published: "status--ok",

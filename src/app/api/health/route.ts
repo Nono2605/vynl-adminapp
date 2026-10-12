@@ -8,7 +8,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
   const db = supabaseAdmin();
   const selectable = async (table: string, columns: string) => !(await db.from(table).select(columns).limit(0)).error;
 
-  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics, privacyConsents, privacyRetention, billing] =
+  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics, privacyConsents, privacyRetention, billing, scanLog, nameSimilarity] =
     await Promise.all([
       selectable("admin_audit_log", "id, outcome"),
       selectable("tracks", "rejection_reason"),
@@ -58,6 +58,10 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
         selectable("stripe_events", "id, outcome"),
         selectable("billing_customers", "user_id"),
       ]).then((r) => r.every(Boolean)),
+      // Journal des contrôles et ressemblance de noms (API/supabase/migrations/20261014000001_scan_log_and_name_similarity.sql).
+      selectable("track_scans", "id, check_kind, result, decision"),
+      // En lecture seule : un nom sans équivalent renvoie zéro ligne si la fonction existe.
+      db.rpc("similar_artist_names", { p_name: "zzzzzzzzzz", p_exclude_artist: null }).then((result) => !result.error),
     ]);
 
   return {
@@ -70,6 +74,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
     // Migrations de l'API (API/supabase/migrations)
     privacy_consents_and_retention: privacyConsents && privacyRetention,
     billing_plans_payments: billing,
+    scan_log_and_name_similarity: scanLog && nameSimilarity,
     integrity_guards: integrity,
     listening_entitlement_and_plays: plays && heartbeats,
     creator_onboarding: onboarding,

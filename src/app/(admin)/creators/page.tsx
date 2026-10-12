@@ -3,10 +3,12 @@ import { FilterPills } from "@/components/FilterPills";
 import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
 import { Pager } from "@/components/Pager";
+import { ScanTable } from "@/components/ScanTable";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDate } from "@/lib/format";
 import { embeddedCount, escapeLike, first, oneOf, pageRange, parsePage, pick, type SearchParams } from "@/lib/query";
+import { SCAN_COLUMNS, type ScanRow } from "@/lib/scans";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -63,6 +65,23 @@ export default async function CreatorsPage({ searchParams }: { searchParams: Pro
     db.from("artists").select("id", head).eq("verified", false),
   ]);
 
+  // Noms proches d'un nom existant, signalés à la création et pas encore relus (journal des contrôles de
+  // l'API). Sans la migration, la table n'existe pas : la section est simplement absente.
+  const nameScanQuery = await db
+    .from("track_scans")
+    .select(SCAN_COLUMNS)
+    .eq("check_kind", "name_similarity")
+    .is("decision", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  const nameScans = (nameScanQuery.error ? [] : nameScanQuery.data) as unknown as ScanRow[];
+  const scanArtistIds = [
+    ...new Set(nameScans.flatMap((scan) => [scan.artist_id, scan.matched_artist_id]).filter((id): id is string => !!id)),
+  ];
+  const scanArtists =
+    scanArtistIds.length > 0 ? await db.from("artists").select("id, name").in("id", scanArtistIds) : { data: [] };
+  const artistNames = new Map(((scanArtists.data ?? []) as { id: string; name: string }[]).map((a) => [a.id, a.name] as const));
+
   const rows = (list.data ?? []) as unknown as ArtistRow[];
   const count = (result: { count: number | null; error: { message: string } | null }) =>
     result.error ? null : result.count;
@@ -77,6 +96,17 @@ export default async function CreatorsPage({ searchParams }: { searchParams: Pro
         <StatCard label="Artist profiles" value={count(artistProfiles)} />
         <StatCard label="Verified" value={count(verifiedArtists)} />
       </div>
+
+      {nameScans.length > 0 && (
+        <section className="section-gap">
+          <h2 className="section-title">Names to check ({nameScans.length})</h2>
+          <p className="muted" style={{ marginBottom: "var(--space-sm)" }}>
+            These artists chose a name close to an existing one when they signed up. Several artists can share a name:
+            check for the imitation of a known artist.
+          </p>
+          <ScanTable scans={nameScans} artistNames={artistNames} />
+        </section>
+      )}
 
       <div className="section-gap" />
       <FilterPills
