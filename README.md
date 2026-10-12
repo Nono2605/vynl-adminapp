@@ -103,3 +103,6 @@ Import this repo on Vercel (framework: Next.js, nothing else to configure) and a
 3. Actions with an audit log: suspend, roles, temporary password, publish / refuse / archive, AI declaration rejection (done)
    Next in this area: automatic audio scan (copyright / plagiarism) as one more review check
 4. Fraud and play control (done). Money (waiting on the remuneration spec): payments and plans, period calculation and ledger, Stripe Connect (creator KYC and automated payouts)
+5. Money in (done, test mode): plans, subscriptions, payments and Stripe events (see "Stripe" above)
+6. Hardening (next): dependency updates, rate limiting and generic errors in the API, security headers on the listener app, size and type limits on the audio bucket, continuous integration (typecheck and tests before each deploy)
+7. Growth and data volume (before the period calculation): separate the open play from the history, lighter and shorter-lived heartbeats, daily roll-ups for analytics and payouts, audio transcoding and CDN, a retention table. Estimates, stages and triggers: `docs/SPEC_REMUNERATION.md`, section 14 (listener app repository)
