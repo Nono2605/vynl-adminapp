@@ -101,8 +101,15 @@ Import this repo on Vercel (framework: Next.js, nothing else to configure) and a
 1. Foundations: login, admin guard, shell, first admin account
 2. Admin MFA (TOTP), read-only pages: users, subscriptions, creators, catalog, plays (done)
 3. Actions with an audit log: suspend, roles, temporary password, publish / refuse / archive, AI declaration rejection (done)
-   Next in this area: automatic audio scan (copyright / plagiarism) as one more review check
+   (the automatic audio scan is now part of step 9)
 4. Fraud and play control (done). Money (waiting on the remuneration spec): payments and plans, period calculation and ledger, Stripe Connect (creator KYC and automated payouts)
 5. Money in (done, test mode): plans, subscriptions, payments and Stripe events (see "Stripe" above)
-6. Hardening (next): dependency updates, rate limiting and generic errors in the API, security headers on the listener app, size and type limits on the audio bucket, continuous integration (typecheck and tests before each deploy)
-7. Growth and data volume (before the period calculation): separate the open play from the history, lighter and shorter-lived heartbeats, daily roll-ups for analytics and payouts, audio transcoding and CDN, a retention table. Estimates, stages and triggers: `docs/SPEC_REMUNERATION.md`, section 14 (listener app repository)
+   Plan updated 12 Oct 2026. Details live in `docs/SPEC_REMUNERATION.md` (listener app repository): growth in section 14, rights and AI content in section 15.
+6. Prerequisites (owner): dashboard checklist (2FA everywhere, RLS check query, Supabase Auth SMTP and anti-bot, backups, Render plan, Stripe portal), choose the Supabase region (Zurich or Frankfurt) while the base holds only test accounts, answers to Q2 / Q4 / Q5, start the legal opinion on rights (step 9) in parallel
+7. Hardening (next): dependency updates, rate limiting and generic errors in the API, security headers on the listener app, size and type limits on the audio bucket, continuous integration (typecheck and tests before each deploy)
+8. Data foundations: growth decisions S1 to S7, a closed genre list on tracks (no genre exists on tracks today), the accounting archive (monthly Stripe exports plus our own payment and payout statements, 10 years), user data export and account deletion, retention table, an e-mail provider
+9. Rights and AI content (a hard requirement before public launch): legal opinion and contact with SUISA (and the foreign societies if the EU is in scope), artist terms with warranties and indemnity, an extended AI declaration (tool, plan, human contribution, no voice clone), a pre-publication scan (fingerprint, AI detector, artist name), a public takedown form with a stay-down list, a hold on payouts
+10. Fraud rules, period calculation, Stripe Connect and payouts
+11. Paid access in live mode (`ENTITLEMENT_MODE=live`), VAT with an accountant
+12. Audio delivery: AAC transcoding, Cloudflare R2 with CDN, originals kept in a Swiss or EU bucket
+13. Public launch: reviewed legal texts published, `PRIVACY_GATE` on, Supabase Pro with backups, monitoring, separate dev and prod environments, EU representative check (GDPR art. 27); then ads with a consent banner
