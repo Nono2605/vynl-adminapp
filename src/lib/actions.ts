@@ -10,7 +10,7 @@ import type { ActionState } from "@/lib/actionTypes";
 // incident, journalisé comme tel.
 export class ActionError extends Error {}
 
-export type AuditTargetType = "user" | "track" | "album" | "ai_declaration" | "play" | "fraud_event" | "billing";
+export type AuditTargetType = "user" | "track" | "album" | "ai_declaration" | "play" | "fraud_event" | "billing" | "scan";
 
 export interface AuditTarget {
   type: AuditTargetType;

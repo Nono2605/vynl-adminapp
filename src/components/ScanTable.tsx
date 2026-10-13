@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { decideScan } from "@/app/actions/scans";
+import { ActionForm } from "@/components/ActionForm";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDateTime } from "@/lib/format";
 import { describeScan, type ScanRow } from "@/lib/scans";
@@ -46,7 +48,33 @@ export function ScanTable({ scans, artistNames }: { scans: ScanRow[]; artistName
                 </td>
                 <td>{formatDateTime(scan.created_at)}</td>
                 <td>
-                  {scan.decision ? `${scan.decision}${scan.decision_note ? ` — ${scan.decision_note}` : ""}` : "Not reviewed"}
+                  {scan.decision ? (
+                    `${scan.decision === "confirmed" ? "Real problem" : "False alarm"}${scan.decision_note ? ` — ${scan.decision_note}` : ""}`
+                  ) : scan.result === "ok" ? (
+                    "—"
+                  ) : (
+                    <details className="history">
+                      <summary>Decide</summary>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", marginTop: "var(--space-xs)" }}>
+                        <ActionForm action={decideScan} submitLabel="False alarm" pendingLabel="Saving…" tone="secondary">
+                          <input type="hidden" name="scanId" value={scan.id} />
+                          <input type="hidden" name="decision" value="dismissed" />
+                          <input name="note" maxLength={500} placeholder="Optional note" className="input-field input-field--sm" />
+                        </ActionForm>
+                        <ActionForm
+                          action={decideScan}
+                          submitLabel="Real problem"
+                          pendingLabel="Saving…"
+                          tone="danger"
+                          confirm="Mark this check as a real problem? The decision cannot be changed afterwards."
+                        >
+                          <input type="hidden" name="scanId" value={scan.id} />
+                          <input type="hidden" name="decision" value="confirmed" />
+                          <input name="note" required minLength={3} maxLength={500} placeholder="What did you find?" className="input-field input-field--sm" />
+                        </ActionForm>
+                      </div>
+                    </details>
+                  )}
                 </td>
               </tr>
             );

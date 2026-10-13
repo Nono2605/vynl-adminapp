@@ -9,7 +9,7 @@ import { oneOf, pageRange, parsePage, pick, type SearchParams } from "@/lib/quer
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-const GROUPS = ["user", "track", "album", "ai_declaration", "play", "fraud_event", "billing"] as const;
+const GROUPS = ["user", "track", "album", "ai_declaration", "play", "fraud_event", "billing", "scan"] as const;
 
 interface Entry {
   id: string;
@@ -21,7 +21,7 @@ interface Entry {
   target_label: string | null;
   outcome: string;
   error: string | null;
-  details: { reason?: string; note?: string; from?: string; to?: string; track_id?: string } | null;
+  details: { reason?: string; note?: string; from?: string; to?: string; track_id?: string | null } | null;
 }
 
 function targetHref(entry: Entry): string | null {
@@ -39,6 +39,8 @@ function targetHref(entry: Entry): string | null {
       return `/plays/${entry.target_id}`;
     case "fraud_event":
       return `/fraud/${entry.target_id}`;
+    case "scan":
+      return entry.details?.track_id ? `/catalog/tracks/${entry.details.track_id}` : "/creators";
     default:
       return null;
   }
