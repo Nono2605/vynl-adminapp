@@ -9,6 +9,7 @@ import { ReviewFlowBar } from "@/components/ReviewFlow";
 import { ScanTable } from "@/components/ScanTable";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format";
+import { genreLabel, loadTrackGenres } from "@/lib/genres";
 import { blockers, declarationState, sumSplits, trackChecks } from "@/lib/moderation";
 import { first, isUuid, pick, type SearchParams } from "@/lib/query";
 import { loadQueue, skipPath } from "@/lib/reviewQueue";
@@ -148,10 +149,16 @@ export default async function TrackReviewPage({
     else audioUrl = signed.data.signedUrl;
   }
 
+  // Genre : lecture à part (la colonne n'existe qu'après la migration des genres de l'API).
+  const genres = await loadTrackGenres(db, [id]);
+  const genreCode = genres?.get(id) ?? null;
+  const genreText = genreCode ? await genreLabel(db, genreCode) : null;
+
   const checks = trackChecks({
     durationSeconds: row.duration_seconds,
     fileCount: fileRows.length,
     declaration: declarationState(declarationRows[0]),
+    genre: genres ? genreCode : undefined,
     splitsTotal: sumSplits(splitRows),
   });
   const blocking = blockers(checks);
@@ -485,6 +492,8 @@ export default async function TrackReviewPage({
             <dd>{formatDuration(row.duration_seconds)}</dd>
             <dt>ISRC</dt>
             <dd>{row.isrc ?? "—"}</dd>
+            <dt>Genre</dt>
+            <dd>{genres ? (genreText ?? "—") : "Not available yet"}</dd>
             <dt>Created</dt>
             <dd>{formatDateTime(row.created_at)}</dd>
             <dt>Last update</dt>

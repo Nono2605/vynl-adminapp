@@ -5,6 +5,7 @@ import { LastDecision } from "@/components/ReviewFlow";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDateTime, formatDuration } from "@/lib/format";
+import { loadTrackGenres } from "@/lib/genres";
 import { declarationState, sumSplits, trackChecks } from "@/lib/moderation";
 import { embeddedCount, first, oneOf, pick, type SearchParams } from "@/lib/query";
 import { QUEUE_KINDS, QUEUE_LABEL, reviewPath, skipPath } from "@/lib/reviewQueue";
@@ -79,6 +80,8 @@ export default async function ModerationPage({ searchParams }: { searchParams: P
   ]);
 
   const trackRows = (tracks.data ?? []) as unknown as QueuedTrack[];
+  // Genre de chaque morceau de la file : lecture à part, tolérante tant que la migration des genres manque.
+  const trackGenres = await loadTrackGenres(db, trackRows.map((track) => track.id));
   const albumRows = (albums.data ?? []) as unknown as QueuedAlbum[];
   const decisionRows = (decisions.data ?? []) as unknown as Decision[];
 
@@ -144,6 +147,7 @@ export default async function ModerationPage({ searchParams }: { searchParams: P
                 durationSeconds: track.duration_seconds,
                 fileCount: embeddedCount(track.track_files),
                 declaration: declarationState(latest),
+                genre: trackGenres ? (trackGenres.get(track.id) ?? null) : undefined,
                 splitsTotal: sumSplits(track.splits),
               });
               const problems = checks.filter((check) => check.state !== "ok");

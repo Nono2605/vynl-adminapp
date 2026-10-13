@@ -38,6 +38,24 @@ describe("publication : la bêta est 100 % IA (décision du 12 oct. 2026)", () =
   });
 });
 
+describe("genre : jamais bloquant, seulement signalé", () => {
+  const genreCheck = (genre: TrackCheckInput["genre"]) =>
+    trackChecks({ ...ready, genre }).find((c) => c.key === "genre");
+
+  it("un genre choisi : ok", () => {
+    assert.equal(genreCheck("pop")?.state, "ok");
+  });
+  it("sans genre : avertissement, la publication n'est pas bloquée", () => {
+    assert.equal(genreCheck(null)?.state, "warn");
+    assert.deepEqual(blocking({ genre: null }), []);
+    assert.deepEqual(blocking({ genre: "" }), []);
+  });
+  it("genre illisible (migration pas appliquée) : aucun contrôle de genre", () => {
+    assert.equal(genreCheck(undefined), undefined);
+    assert.deepEqual(blocking({}), []);
+  });
+});
+
 describe("publication : les autres contrôles restent bloquants", () => {
   it("sans fichier audio", () => assert.deepEqual(blocking({ fileCount: 0 }), ["audio"]));
   it("sans durée mesurée", () => {

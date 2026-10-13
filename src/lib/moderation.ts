@@ -22,7 +22,7 @@ export type DeclarationState = "none" | "ai" | "held" | "rejected";
 export type CheckState = "ok" | "warn" | "fail";
 
 export interface Check {
-  key: "audio" | "duration" | "declaration" | "splits";
+  key: "audio" | "duration" | "declaration" | "genre" | "splits";
   label: string;
   state: CheckState;
   detail: string;
@@ -32,6 +32,8 @@ export interface TrackCheckInput {
   durationSeconds: number | null;
   fileCount: number;
   declaration: DeclarationState;
+  // Genre (liste fermée). undefined = on n'a pas pu le lire (migration des genres pas encore appliquée) : pas de contrôle.
+  genre?: string | null;
   // Somme des parts (%) si des parts existent, null s'il n'y en a aucune.
   splitsTotal: number | null;
 }
@@ -84,6 +86,15 @@ export function trackChecks(input: TrackCheckInput): Check[] {
     rejected: { key: "declaration", label: "AI declaration", state: "fail", detail: "Rejected: the track cannot be published as declared" },
   };
   checks.push(declaration[input.declaration]);
+
+  // Le genre n'empêche pas de publier : sans lui, le morceau manque simplement aux statistiques par style.
+  if (input.genre !== undefined) {
+    checks.push(
+      input.genre
+        ? { key: "genre", label: "Genre", state: "ok", detail: "Chosen by the creator" }
+        : { key: "genre", label: "Genre", state: "warn", detail: "No genre chosen: the track is missing from the style statistics" }
+    );
+  }
 
   if (input.splitsTotal === null) {
     checks.push({ key: "splits", label: "Revenue splits", state: "ok", detail: "None defined" });

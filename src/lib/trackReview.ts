@@ -1,5 +1,6 @@
 import "server-only";
 import { ActionError } from "@/lib/actions";
+import { loadTrackGenres } from "@/lib/genres";
 import { blockers, declarationState, sumSplits, trackChecks, type Check } from "@/lib/moderation";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -38,10 +39,12 @@ export async function loadTrackChecks(trackId: string): Promise<{ track: TrackFo
   if (failure?.error) throw new ActionError(`Could not read the track: ${failure.error.message}`);
   if (!track.data) throw new ActionError("Track not found.");
 
+  const genres = await loadTrackGenres(db, [trackId]);
   const checks = trackChecks({
     durationSeconds: track.data.duration_seconds,
     fileCount: files.count ?? 0,
     declaration: declarationState(declarations.data?.[0]),
+    genre: genres ? (genres.get(trackId) ?? null) : undefined,
     splitsTotal: sumSplits(splits.data as { percentage: number | string }[] | null),
   });
 

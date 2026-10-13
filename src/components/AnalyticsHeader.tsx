@@ -9,6 +9,7 @@ import { withParams } from "@/lib/query";
 const TABS = [
   { id: "overview", label: "Overview", path: "/analytics" },
   { id: "artists", label: "Artists", path: "/analytics/artists" },
+  { id: "genres", label: "Genres", path: "/analytics/genres" },
   { id: "geography", label: "Geography", path: "/analytics/geography" },
   { id: "listeners", label: "Listeners", path: "/analytics/listeners" },
   { id: "sources", label: "Sources", path: "/analytics/sources" },

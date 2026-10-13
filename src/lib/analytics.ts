@@ -130,6 +130,22 @@ export const getTopArtists = (filters: AnalyticsFilters, limit = 20) =>
 export const getTopTracks = (filters: AnalyticsFilters, limit = 20, artistId?: string) =>
   call<TopTrack[]>("admin_stats_top_tracks", args(filters, { p_artist_id: artistId ?? null, p_limit: limit }), []);
 
+// Par genre (supabase/migrations/20261014100000_admin_genres.sql, qui demande d'abord la migration des genres
+// de l'API). « none » regroupe les morceaux sans genre.
+export const GENRES_MIGRATIONS = "API/supabase/migrations/20261014000002_genres.sql then supabase/migrations/20261014100000_admin_genres.sql";
+
+export interface GenreRow {
+  genre_code: string;
+  label: string;
+  plays: number;
+  seconds: number;
+  listeners: number;
+  tracks: number;
+}
+
+export const getGenres = (filters: AnalyticsFilters, artistId?: string) =>
+  call<GenreRow[]>("admin_stats_genres", args(filters, { p_artist_id: artistId ?? null }), []);
+
 export const getByCountry = (filters: AnalyticsFilters, artistId?: string) =>
   call<CountryRow[]>("admin_stats_by_country", args(filters, { p_artist_id: artistId ?? null }), []);
 

@@ -8,7 +8,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
   const db = supabaseAdmin();
   const selectable = async (table: string, columns: string) => !(await db.from(table).select(columns).limit(0)).error;
 
-  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics, privacyConsents, privacyRetention, billing, scanLog, nameSimilarity] =
+  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics, privacyConsents, privacyRetention, billing, scanLog, nameSimilarity, genresTable, genreColumn, genreStats] =
     await Promise.all([
       selectable("admin_audit_log", "id, outcome"),
       selectable("tracks", "rejection_reason"),
@@ -62,6 +62,13 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
       selectable("track_scans", "id, check_kind, result, decision"),
       // En lecture seule : un nom sans équivalent renvoie zéro ligne si la fonction existe.
       db.rpc("similar_artist_names", { p_name: "zzzzzzzzzz", p_exclude_artist: null }).then((result) => !result.error),
+      // Genres (API/supabase/migrations/20261014000002_genres.sql) puis statistiques par genre
+      // (supabase/migrations/20261014100000_admin_genres.sql, de ce dépôt).
+      selectable("genres", "code, label, active"),
+      selectable("tracks", "genre_code"),
+      db
+        .rpc("admin_stats_genres", { p_from: "2000-01-01T00:00:00Z", p_to: "2000-01-02T00:00:00Z" })
+        .then((result) => !result.error),
     ]);
 
   return {
@@ -75,6 +82,8 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
     privacy_consents_and_retention: privacyConsents && privacyRetention,
     billing_plans_payments: billing,
     scan_log_and_name_similarity: scanLog && nameSimilarity,
+    genres: genresTable && genreColumn,
+    admin_genres: genreStats,
     integrity_guards: integrity,
     listening_entitlement_and_plays: plays && heartbeats,
     creator_onboarding: onboarding,
