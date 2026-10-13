@@ -8,7 +8,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
   const db = supabaseAdmin();
   const selectable = async (table: string, columns: string) => !(await db.from(table).select(columns).limit(0)).error;
 
-  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics, privacyConsents, privacyRetention, billing, scanLog, nameSimilarity, genresTable, genreColumn, genreStats] =
+  const [adminAuditLog, trackReasons, albumReasons, declarationNotes, plays, heartbeats, integrity, preferences, onboarding, stats, numbers, simplified, analytics, privacyConsents, privacyRetention, billing, scanLog, nameSimilarity, genresTable, genreColumn, genreStats, fraudKey, fraudPlays] =
     await Promise.all([
       selectable("admin_audit_log", "id, outcome"),
       selectable("tracks", "rejection_reason"),
@@ -69,6 +69,10 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
       db
         .rpc("admin_stats_genres", { p_from: "2000-01-01T00:00:00Z", p_to: "2000-01-02T00:00:00Z" })
         .then((result) => !result.error),
+      // Détection de fraude (API/supabase/migrations/20261014000005_fraud_detection.sql). On ne lance PAS
+      // fraud_detect (elle écrit) : on lit la colonne de clé et on appelle la fonction de portée en lecture seule.
+      selectable("fraud_events", "dedupe_key"),
+      db.rpc("fraud_event_plays", { p_event_id: "00000000-0000-0000-0000-000000000000" }).then((result) => !result.error),
     ]);
 
   return {
@@ -84,6 +88,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
     scan_log_and_name_similarity: scanLog && nameSimilarity,
     genres: genresTable && genreColumn,
     admin_genres: genreStats,
+    fraud_detection: fraudKey && fraudPlays,
     integrity_guards: integrity,
     listening_entitlement_and_plays: plays && heartbeats,
     creator_onboarding: onboarding,

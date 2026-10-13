@@ -2,6 +2,7 @@
 
 import { ActionError, actionResult, ensure, formReason, formText, formUuid, runAudited } from "@/lib/actions";
 import type { ActionState } from "@/lib/actionTypes";
+import { isExcludable, summarizeDetection } from "@/lib/fraudRules";
 import { findFrozenPeriod } from "@/lib/periods";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -111,6 +112,88 @@ export async function resolveFraudEvent(_state: ActionState | undefined, formDat
         ensure(updateError, "The database refused the change");
         if (data?.length !== 1) throw new ActionError("The event changed in the meantime. Reload the page.");
         return { message: resolve ? "Event resolved." : "Event reopened." };
+      }
+    );
+  });
+}
+
+// Lance la détection de fraude (fonction SQL fraud_detect de l'API) : six règles qui regardent les écoutes jour par
+// jour et écrivent des événements. Elle SIGNALE seulement ; rejouable sans danger (un même événement n'est écrit
+// qu'une fois). Par défaut les journées COMPLÈTES des trois derniers jours ; « include today » ajoute la journée en
+// cours, dont les chiffres ne sont pas définitifs.
+export async function runFraudDetection(_state: ActionState | undefined, formData: FormData): Promise<ActionState> {
+  return actionResult(async () => {
+    const admin = await requireAdmin();
+    const includeToday = formData.get("include_today") === "on";
+
+    return runAudited(
+      admin,
+      "fraud.detect",
+      { type: "fraud_event", label: "Detection run" },
+      { include_today: includeToday },
+      async () => {
+        const { data, error } = await supabaseAdmin().rpc("fraud_detect", includeToday ? { p_until: new Date().toISOString() } : {});
+        if (error?.code === "PGRST202" || /could not find the function/i.test(error?.message ?? "")) {
+          throw new ActionError("The detection is not installed yet: apply the latest migrations of the API repository, then try again.");
+        }
+        ensure(error, "The detection failed");
+        const rows = (data ?? []) as { rule: string; created: number | string }[];
+        const counts = rows.map((row) => ({ rule: row.rule, created: Number(row.created) }));
+        return { message: summarizeDetection(counts), details: { created: counts } };
+      }
+    );
+  });
+}
+
+// Exclut les écoutes derrière un événement détecté (counted = false, avec le motif ; jamais supprimées). Réservé aux
+// types dont la portée est claire ; refusé si la journée appartient à une période de redevances figée (une correction
+// passe alors dans une période suivante). Le nombre d'écoutes exclues est noté dans l'événement.
+export async function excludeEventPlays(_state: ActionState | undefined, formData: FormData): Promise<ActionState> {
+  return actionResult(async () => {
+    const admin = await requireAdmin();
+    const eventId = formUuid(formData, "eventId");
+    const reason = formReason(formData, "reason", true);
+
+    const db = supabaseAdmin();
+    const { data: event, error } = await db
+      .from("fraud_events")
+      .select("id, event_type, details")
+      .eq("id", eventId)
+      .maybeSingle();
+    ensure(error, "Could not read the fraud event");
+    if (!event) throw new ActionError("Fraud event not found.");
+    if (!isExcludable(event.event_type)) {
+      throw new ActionError("The plays of this kind of event are not excluded in one gesture: review the listener's plays one by one.");
+    }
+
+    const windowStart = (event.details as { window_start?: unknown } | null)?.window_start;
+    if (typeof windowStart !== "string") throw new ActionError("This event has no time window: it cannot be excluded in one gesture.");
+    const frozen = await findFrozenPeriod(windowStart);
+    if (frozen) {
+      throw new ActionError(
+        `These plays belong to the ${frozen.status} period ${frozen.period_start} to ${frozen.period_end}, which can no longer change. A correction goes into a later period.`
+      );
+    }
+
+    return runAudited(
+      admin,
+      "fraud_event.exclude_plays",
+      { type: "fraud_event", id: event.id, label: event.event_type },
+      { reason, event_type: event.event_type, window_start: windowStart },
+      async () => {
+        const { data, error: rpcError } = await db.rpc("fraud_exclude_event_plays", {
+          p_event_id: event.id,
+          p_reason: `${ADMIN_REASON_PREFIX}fraud ${event.event_type}: ${reason}`,
+        });
+        ensure(rpcError, "The database refused the exclusion");
+        const excluded = Number(data ?? 0);
+        return {
+          message:
+            excluded === 0
+              ? "No counted play left to exclude for this event."
+              : `${excluded} play${excluded > 1 ? "s" : ""} excluded: they stay in the history but no longer count.`,
+          details: { excluded },
+        };
       }
     );
   });

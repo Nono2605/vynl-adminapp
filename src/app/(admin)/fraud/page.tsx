@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { runFraudDetection } from "@/app/actions/fraud";
+import { ActionForm } from "@/components/ActionForm";
 import { FilterPills } from "@/components/FilterPills";
 import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
 import { Pager } from "@/components/Pager";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
+import { FRAUD_RULES, describeFraudEvent, ruleFor } from "@/lib/fraudRules";
 import { formatDateTime } from "@/lib/format";
 import { first, oneOf, pageRange, parsePage, pick, type SearchParams } from "@/lib/query";
 import { requireAdmin } from "@/lib/session";
@@ -108,11 +111,34 @@ export default async function FraudPage({ searchParams }: { searchParams: Promis
         <StatCard label="Excluded, last 7 days" value={count(excluded7d)} />
       </div>
 
-      <p className="muted section-gap">
-        Nothing detects fraud automatically yet: events and scores appear here once a detection job writes them. Until then,
-        spot a suspicious listener from <Link href="/plays" className="text-link">Plays</Link> and exclude the plays one by
-        one: an excluded play stays in the history but no longer counts toward earnings.
-      </p>
+      <section className="dash-card section-gap">
+        <h2 className="section-title">Detection</h2>
+        <p className="muted" style={{ marginBottom: "var(--space-sm)" }}>
+          {FRAUD_RULES.length} rules look at the listening day by day and write an event for what a person has little reason to
+          do. The detection only flags: nothing is excluded until you decide, event by event. Running it twice never writes the
+          same event twice. It examines the last three complete days; it can also be scheduled (see the API migration). An
+          excluded play stays in the history but no longer counts toward earnings.
+        </p>
+        <ActionForm action={runFraudDetection} submitLabel="Run the detection" pendingLabel="Running…" tone="secondary">
+          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--vynl-texte-2)" }}>
+            <input type="checkbox" name="include_today" />
+            Include today (the day is not over: figures are not final)
+          </label>
+        </ActionForm>
+        <details className="history" style={{ marginTop: "var(--space-sm)" }}>
+          <summary>What is checked</summary>
+          <table className="table" style={{ marginTop: "var(--space-xs)" }}>
+            <tbody>
+              {FRAUD_RULES.map((rule) => (
+                <tr key={rule.type}>
+                  <td className="cell-main">{rule.title}</td>
+                  <td className="muted">{rule.what}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      </section>
 
       <h2 className="section-title section-gap">Events</h2>
       <FilterPills
@@ -152,7 +178,7 @@ export default async function FraudPage({ searchParams }: { searchParams: Promis
             {rows.map((event) => (
               <tr key={event.id}>
                 <td>{formatDateTime(event.detected_at)}</td>
-                <td>{event.event_type}</td>
+                <td>{ruleFor(event.event_type)?.title ?? event.event_type}</td>
                 <td>
                   <StatusBadge status={event.severity} />
                 </td>
@@ -166,7 +192,9 @@ export default async function FraudPage({ searchParams }: { searchParams: Promis
                   )}
                 </td>
                 <td className="cell-main">{first(event.tracks)?.title ?? "—"}</td>
-                <td className="cell-main muted">{preview(event.details)}</td>
+                <td className="cell-main muted">
+                  {describeFraudEvent(event.event_type, event.details as Record<string, unknown> | null) || preview(event.details)}
+                </td>
                 <td>
                   <Link href={`/fraud/${event.id}`} className="btn btn-secondary btn-sm">
                     Open

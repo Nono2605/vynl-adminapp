@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { resolveFraudEvent } from "@/app/actions/fraud";
+import { excludeEventPlays, resolveFraudEvent } from "@/app/actions/fraud";
 import { ActionForm } from "@/components/ActionForm";
 import { AuditTrail } from "@/components/AuditTrail";
 import { PageHead } from "@/components/PageHead";
 import { StatusBadge } from "@/components/StatusBadge";
+import { describeFraudEvent, excludedCount, isExcludable, ruleFor } from "@/lib/fraudRules";
 import { formatDateTime } from "@/lib/format";
 import { first, isUuid } from "@/lib/query";
 import { requireAdmin } from "@/lib/session";
@@ -46,6 +47,16 @@ export default async function FraudEventPage({ params }: { params: Promise<{ id:
   const email = first(event.users)?.email;
   const trackTitle = first(event.tracks)?.title;
   const hasDetails = event.details !== null && event.details !== undefined && JSON.stringify(event.details) !== "{}";
+  const details = (event.details && typeof event.details === "object" ? event.details : {}) as Record<string, unknown>;
+  const rule = ruleFor(event.event_type);
+  const sentence = describeFraudEvent(event.event_type, details);
+  const alreadyExcluded = excludedCount(details);
+
+  // Les écoutes encore COMPTÉES derrière cet événement (lecture seule : la fonction SQL ne modifie rien).
+  const exclusion = isExcludable(event.event_type)
+    ? await supabaseAdmin().rpc("fraud_event_plays", { p_event_id: event.id }, { count: "exact", head: true })
+    : null;
+  const countedPlays = exclusion && !exclusion.error ? (exclusion.count ?? 0) : null;
 
   return (
     <>
@@ -55,7 +66,7 @@ export default async function FraudEventPage({ params }: { params: Promise<{ id:
         </Link>{" "}
         / {event.event_type}
       </p>
-      <PageHead title={event.event_type} plain>
+      <PageHead title={rule?.title ?? event.event_type} plain>
         <span style={{ display: "inline-flex", gap: "var(--space-xs)" }}>
           <StatusBadge status={event.severity} />
           {event.resolved ? <StatusBadge status="resolved" /> : <span className="status status--warn">open</span>}
@@ -130,6 +141,55 @@ export default async function FraudEventPage({ params }: { params: Promise<{ id:
           )}
         </section>
       </div>
+
+      {(sentence || rule) && (
+        <section className="section-gap">
+          <h2 className="section-title">What was detected</h2>
+          {sentence && <p>{sentence}</p>}
+          {rule && <p className="muted">{rule.what}</p>}
+        </section>
+      )}
+
+      {rule && (
+        <section className="section-gap">
+          <h2 className="section-title">Plays behind this event</h2>
+          {!rule.excludable ? (
+            <p className="muted">
+              This kind of event is a signal to review, not a set of plays to exclude in one gesture. Open the listener and exclude
+              plays one by one if needed.
+            </p>
+          ) : countedPlays === null ? (
+            <p className="muted">The detection is not installed yet: apply the latest migrations of the API repository.</p>
+          ) : (
+            <>
+              <p>
+                <strong>{countedPlays}</strong> counted play{countedPlays === 1 ? "" : "s"} still count behind this event
+                {alreadyExcluded > 0 ? `; ${alreadyExcluded} already excluded from it` : ""}. Excluded plays stay in the history but
+                no longer count toward earnings.
+              </p>
+              {countedPlays > 0 && (
+                <ActionForm
+                  action={excludeEventPlays}
+                  submitLabel={`Exclude ${countedPlays} play${countedPlays === 1 ? "" : "s"}`}
+                  pendingLabel="Excluding…"
+                  tone="danger"
+                  confirm={`Exclude ${countedPlays} play${countedPlays === 1 ? "" : "s"}? They stay in the history but no longer count.`}
+                >
+                  <input type="hidden" name="eventId" value={event.id} />
+                  <textarea
+                    name="reason"
+                    required
+                    minLength={3}
+                    maxLength={500}
+                    placeholder="Why are these plays excluded? (kept in the audit log and on each play)"
+                    className="input-field"
+                  />
+                </ActionForm>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       <section className="section-gap">
         <h2 className="section-title">Details recorded by the detection</h2>
