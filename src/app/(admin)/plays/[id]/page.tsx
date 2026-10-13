@@ -45,7 +45,6 @@ interface PlayRow {
 }
 
 interface Heartbeat {
-  id: string;
   seq: number;
   state: string;
   position_seconds: number;
@@ -71,7 +70,7 @@ export default async function PlayPage({ params }: { params: Promise<{ id: strin
       .maybeSingle(),
     db
       .from("play_heartbeats")
-      .select("id, seq, state, position_seconds, credited_seconds, received_at", { count: "exact" })
+      .select("seq, state, position_seconds, credited_seconds, received_at", { count: "exact" })
       .eq("play_id", id)
       .order("seq", { ascending: true })
       .limit(HEARTBEAT_LIMIT),
@@ -299,7 +298,7 @@ export default async function PlayPage({ params }: { params: Promise<{ id: strin
                 </tr>
               )}
               {beats.map((beat) => (
-                <tr key={beat.id}>
+                <tr key={beat.seq}>
                   <td className="num">{beat.seq}</td>
                   <td>{beat.state}</td>
                   <td className="num">{formatDuration(beat.position_seconds)}</td>

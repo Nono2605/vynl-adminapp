@@ -15,7 +15,7 @@ async function schemaChecks(): Promise<Record<string, boolean>> {
       selectable("albums", "rejection_reason"),
       selectable("ai_declarations", "review_note"),
       selectable("plays", "entitlement, last_heartbeat_at, country_code"),
-      selectable("play_heartbeats", "id"),
+      selectable("play_heartbeats", "play_id, seq"),
       // tracks.published_by + track_files.verified_at : posés par integrity_guards.
       Promise.all([selectable("tracks", "published_by"), selectable("track_files", "verified_at")]).then((r) => r.every(Boolean)),
       selectable("profiles", "explicit_content, favorite_genres"),
