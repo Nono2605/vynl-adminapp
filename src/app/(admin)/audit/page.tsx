@@ -9,7 +9,7 @@ import { oneOf, pageRange, parsePage, pick, type SearchParams } from "@/lib/quer
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
-const GROUPS = ["user", "track", "album", "ai_declaration", "play", "fraud_event", "billing", "scan"] as const;
+const GROUPS = ["user", "track", "album", "ai_declaration", "play", "fraud_event", "billing", "scan", "artist"] as const;
 
 interface Entry {
   id: string;
@@ -41,6 +41,8 @@ function targetHref(entry: Entry): string | null {
       return `/fraud/${entry.target_id}`;
     case "scan":
       return entry.details?.track_id ? `/catalog/tracks/${entry.details.track_id}` : "/creators";
+    case "artist":
+      return "/creators";
     default:
       return null;
   }
@@ -88,6 +90,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
           { label: "Plays", value: "play" },
           { label: "Fraud events", value: "fraud_event" },
           { label: "Billing", value: "billing" },
+          { label: "Artists", value: "artist" },
         ]}
       />
 

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { decideArtistName, setArtistVerified } from "@/app/actions/artists";
+import { ActionForm } from "@/components/ActionForm";
 import { FilterPills } from "@/components/FilterPills";
 import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
@@ -6,6 +8,7 @@ import { Pager } from "@/components/Pager";
 import { ScanTable } from "@/components/ScanTable";
 import { StatCard } from "@/components/StatCard";
 import { StatusBadge } from "@/components/StatusBadge";
+import { isMissingColumn, similarNames } from "@/lib/artistNames";
 import { formatDate } from "@/lib/format";
 import { embeddedCount, escapeLike, first, oneOf, pageRange, parsePage, pick, type SearchParams } from "@/lib/query";
 import { SCAN_COLUMNS, type ScanRow } from "@/lib/scans";
@@ -27,11 +30,23 @@ interface ArtistRow {
   slug: string;
   country: string | null;
   verified: boolean;
+  /** Absents tant que la migration de la relecture des noms n'est pas appliquée. */
+  name_status?: string;
+  name_review_note?: string | null;
   created_at: string;
   users: { email: string; creator_onboarding: Onboarding | Onboarding[] | null } | { email: string; creator_onboarding: Onboarding | Onboarding[] | null }[] | null;
   tracks: { count: number }[];
   albums: { count: number }[];
   follows: { count: number }[];
+}
+
+interface PendingArtist {
+  id: string;
+  catalog_code: string | null;
+  user_id: string | null;
+  name: string;
+  created_at: string;
+  users: { email: string } | { email: string }[] | null;
 }
 
 export default async function CreatorsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -46,24 +61,60 @@ export default async function CreatorsPage({ searchParams }: { searchParams: Pro
   const db = supabaseAdmin();
   const head = { count: "exact", head: true } as const;
 
-  let query = db
-    .from("artists")
-    .select(
-      "id, catalog_code, user_id, name, slug, country, verified, created_at, users(email, creator_onboarding(content_provenance, owns_rights)), tracks(count), albums(count), follows(count)",
-      { count: "exact" }
-    )
-    .order("created_at", { ascending: false })
-    .range(from, to);
-  if (q) query = query.ilike("name", `%${escapeLike(q)}%`);
-  if (verified) query = query.eq("verified", verified === "yes");
+  const ARTIST_COLUMNS =
+    "id, catalog_code, user_id, name, slug, country, verified, created_at, users(email, creator_onboarding(content_provenance, owns_rights)), tracks(count), albums(count), follows(count)";
+  const listArtists = (withReview: boolean) => {
+    let query = db
+      .from("artists")
+      .select(withReview ? `${ARTIST_COLUMNS}, name_status, name_review_note` : ARTIST_COLUMNS, { count: "exact" })
+      .order("created_at", { ascending: false })
+      .range(from, to);
+    if (q) query = query.ilike("name", `%${escapeLike(q)}%`);
+    if (verified) query = query.eq("verified", verified === "yes");
+    return query;
+  };
 
-  const [list, creatorAccounts, artistProfiles, verifiedArtists, unverifiedArtists] = await Promise.all([
-    query,
+  const [firstList, creatorAccounts, artistProfiles, verifiedArtists, unverifiedArtists] = await Promise.all([
+    listArtists(true),
     db.from("users").select("id", head).eq("role", "creator"),
     db.from("artists").select("id", head),
     db.from("artists").select("id", head).eq("verified", true),
     db.from("artists").select("id", head).eq("verified", false),
   ]);
+  // Sans la migration de la relecture des noms (API/supabase/migrations/20261017000000_artist_name_review.sql),
+  // les colonnes manquent : on relit sans elles, et la section « Names to review » est absente.
+  let list = firstList;
+  let reviewAvailable = true;
+  if (list.error && isMissingColumn(list.error)) {
+    list = await listArtists(false);
+    reviewAvailable = false;
+  }
+
+  // Les artistes dont le nom attend une décision : leur page n'est pas publique tant qu'on n'a pas tranché.
+  let pending: PendingArtist[] = [];
+  let pendingScans: ScanRow[] = [];
+  if (reviewAvailable) {
+    const pendingQuery = await db
+      .from("artists")
+      .select("id, catalog_code, user_id, name, created_at, users(email)")
+      .eq("name_status", "pending")
+      .order("created_at", { ascending: true })
+      .limit(50);
+    pending = pendingQuery.error ? [] : (pendingQuery.data as unknown as PendingArtist[]);
+    if (pending.length > 0) {
+      const pendingScanQuery = await db
+        .from("track_scans")
+        .select(SCAN_COLUMNS)
+        .eq("check_kind", "name_similarity")
+        .is("decision", null)
+        .in(
+          "artist_id",
+          pending.map((artist) => artist.id)
+        );
+      pendingScans = pendingScanQuery.error ? [] : (pendingScanQuery.data as unknown as ScanRow[]);
+    }
+  }
+  const pendingIds = new Set(pending.map((artist) => artist.id));
 
   // Noms proches d'un nom existant, signalés à la création et pas encore relus (journal des contrôles de
   // l'API). Sans la migration, la table n'existe pas : la section est simplement absente.
@@ -74,7 +125,10 @@ export default async function CreatorsPage({ searchParams }: { searchParams: Pro
     .is("decision", null)
     .order("created_at", { ascending: false })
     .limit(20);
-  const nameScans = (nameScanQuery.error ? [] : nameScanQuery.data) as unknown as ScanRow[];
+  // Les artistes en attente de décision ont leur propre section ci-dessus : pas de doublon ici.
+  const nameScans = ((nameScanQuery.error ? [] : nameScanQuery.data) as unknown as ScanRow[]).filter(
+    (scan) => !(scan.artist_id && pendingIds.has(scan.artist_id))
+  );
   const scanArtistIds = [
     ...new Set(nameScans.flatMap((scan) => [scan.artist_id, scan.matched_artist_id]).filter((id): id is string => !!id)),
   ];
@@ -95,7 +149,90 @@ export default async function CreatorsPage({ searchParams }: { searchParams: Pro
         <StatCard label="Creator accounts" value={count(creatorAccounts)} />
         <StatCard label="Artist profiles" value={count(artistProfiles)} />
         <StatCard label="Verified" value={count(verifiedArtists)} />
+        {reviewAvailable && <StatCard label="Names to review" value={pending.length} />}
       </div>
+
+      {pending.length > 0 && (
+        <section className="section-gap">
+          <h2 className="section-title">Names to review ({pending.length})</h2>
+          <p className="muted" style={{ marginBottom: "var(--space-sm)" }}>
+            These artists chose a name close to an existing one. Until you decide, their page is not public and they
+            cannot submit music for review. Approve a name that is not an imitation; decline one that is, with a reason
+            the artist will read. An approved name is permanent.
+          </p>
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Artist</th>
+                  <th>Close to</th>
+                  <th>Joined</th>
+                  <th>Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pending.map((artist) => {
+                  const account = first(artist.users);
+                  const close = similarNames(pendingScans.filter((scan) => scan.artist_id === artist.id));
+                  return (
+                    <tr key={artist.id}>
+                      <td className="cell-main">
+                        {artist.name}
+                        {artist.catalog_code && <span className="muted"> · {artist.catalog_code}</span>}
+                        <br />
+                        {artist.user_id && account ? (
+                          <Link href={`/users/${artist.user_id}`} className="text-link">
+                            {account.email}
+                          </Link>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {close.length === 0
+                          ? "—"
+                          : close
+                              .map((match) => (match.score === null ? match.name : `${match.name} (${match.score.toFixed(2)})`))
+                              .join(", ")}
+                      </td>
+                      <td>{formatDate(artist.created_at)}</td>
+                      <td>
+                        <details className="history">
+                          <summary>Decide</summary>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", marginTop: "var(--space-xs)" }}>
+                            <ActionForm
+                              action={decideArtistName}
+                              submitLabel="Approve name"
+                              pendingLabel="Saving…"
+                              tone="secondary"
+                              confirm="Approve this name? It becomes permanent and the artist page becomes public."
+                            >
+                              <input type="hidden" name="artistId" value={artist.id} />
+                              <input type="hidden" name="decision" value="approved" />
+                              <input name="note" maxLength={500} placeholder="Optional note (kept in the audit log)" className="input-field input-field--sm" />
+                            </ActionForm>
+                            <ActionForm
+                              action={decideArtistName}
+                              submitLabel="Decline name"
+                              pendingLabel="Saving…"
+                              tone="danger"
+                              confirm="Decline this name? The artist will read your reason and choose another name."
+                            >
+                              <input type="hidden" name="artistId" value={artist.id} />
+                              <input type="hidden" name="decision" value="rejected" />
+                              <input name="note" required minLength={3} maxLength={500} placeholder="Reason, shown to the artist" className="input-field input-field--sm" />
+                            </ActionForm>
+                          </div>
+                        </details>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {nameScans.length > 0 && (
         <section className="section-gap">
@@ -174,6 +311,11 @@ export default async function CreatorsPage({ searchParams }: { searchParams: Pro
                     <Link href={`/catalog?artist=${artist.id}`} className="text-link">
                       {artist.name}
                     </Link>{" "}
+                    {artist.name_status && artist.name_status !== "approved" && (
+                      <>
+                        <StatusBadge status={artist.name_status} />{" "}
+                      </>
+                    )}
                     <span className="muted">
                       /{artist.slug}
                       {artist.catalog_code ? ` · ${artist.catalog_code}` : ""}
@@ -188,7 +330,25 @@ export default async function CreatorsPage({ searchParams }: { searchParams: Pro
                       "—"
                     )}
                   </td>
-                  <td>{artist.verified ? <StatusBadge status="approved" /> : <span className="muted">No</span>}</td>
+                  <td>
+                    {artist.verified ? <StatusBadge status="approved" /> : <span className="muted">No</span>}
+                    <details className="history">
+                      <summary>{artist.verified ? "Remove" : "Verify"}</summary>
+                      <div style={{ marginTop: "var(--space-xs)" }}>
+                        <ActionForm
+                          action={setArtistVerified}
+                          submitLabel={artist.verified ? "Remove badge" : "Verify artist"}
+                          pendingLabel="Saving…"
+                          tone={artist.verified ? "danger" : "secondary"}
+                          confirm={artist.verified ? "Remove the verified badge from this artist?" : "Give this artist the verified badge?"}
+                        >
+                          <input type="hidden" name="artistId" value={artist.id} />
+                          <input type="hidden" name="verified" value={artist.verified ? "no" : "yes"} />
+                          <input name="note" maxLength={500} placeholder="Optional note" className="input-field input-field--sm" />
+                        </ActionForm>
+                      </div>
+                    </details>
+                  </td>
                   <td>{onboarding?.content_provenance ?? "—"}</td>
                   <td>{artist.country ?? "—"}</td>
                   <td className="num">{embeddedCount(artist.tracks)}</td>
