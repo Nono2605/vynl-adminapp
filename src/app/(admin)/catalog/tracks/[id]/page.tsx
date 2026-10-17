@@ -10,6 +10,7 @@ import { ScanTable } from "@/components/ScanTable";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatDate, formatDateTime, formatDuration } from "@/lib/format";
 import { genreLabel, loadTrackGenres } from "@/lib/genres";
+import { loadTrackDetails } from "@/lib/trackDetails";
 import { blockers, declarationState, sumSplits, trackChecks } from "@/lib/moderation";
 import { first, isUuid, pick, type SearchParams } from "@/lib/query";
 import { loadQueue, skipPath } from "@/lib/reviewQueue";
@@ -153,6 +154,9 @@ export default async function TrackReviewPage({
   const genres = await loadTrackGenres(db, [id]);
   const genreCode = genres?.get(id) ?? null;
   const genreText = genreCode ? await genreLabel(db, genreCode) : null;
+  // Autres genres, styles libres et crédits : seulement après la migration des détails de release de l'API.
+  const details = await loadTrackDetails(db, id);
+  const otherGenres = details ? await Promise.all(details.extraGenreCodes.map((code) => genreLabel(db, code))) : [];
 
   const checks = trackChecks({
     durationSeconds: row.duration_seconds,
@@ -494,6 +498,32 @@ export default async function TrackReviewPage({
             <dd>{row.isrc ?? "—"}</dd>
             <dt>Genre</dt>
             <dd>{genres ? (genreText ?? "—") : "Not available yet"}</dd>
+            {details && (
+              <>
+                <dt>Other genres</dt>
+                <dd>{otherGenres.length > 0 ? otherGenres.join(", ") : "—"}</dd>
+                <dt>Style tags</dt>
+                <dd>{details.tags.length > 0 ? details.tags.map((tag) => `#${tag}`).join(" ") : "—"}</dd>
+                <dt>Credits</dt>
+                <dd>
+                  {details.credits.length === 0
+                    ? "—"
+                    : details.credits.map((credit, index) => (
+                        <span key={`${credit.role}-${credit.name}-${index}`}>
+                          {index > 0 && " · "}
+                          {credit.artistId ? (
+                            <Link href={`/catalog?artist=${credit.artistId}`} className="text-link">
+                              {credit.name}
+                            </Link>
+                          ) : (
+                            credit.name
+                          )}{" "}
+                          <span className="muted">({credit.roleLabel})</span>
+                        </span>
+                      ))}
+                </dd>
+              </>
+            )}
             <dt>Created</dt>
             <dd>{formatDateTime(row.created_at)}</dd>
             <dt>Last update</dt>
