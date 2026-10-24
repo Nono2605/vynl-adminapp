@@ -90,6 +90,12 @@ Events are only a trigger: the API re-reads the object from Stripe before writin
 - `requireAdmin()` (`src/lib/session.ts`) is. It validates the user with Supabase Auth (`getUser()`), reads `role` and `status` from `public.users` (never from the JWT), then requires an AAL2 session.
 - Call `requireAdmin()` at the top of **every page that reads data and every Server Action**. A layout does not re-run when navigating between pages that share it.
 
+## System page
+
+`/system` shows, for admins only, what is really set up: the version of the API that is deployed (Render's commit), its modes (listening rights, local token check, Stripe mode and tax), which secrets are **set or missing** (never their value: the API answers `GET /admin/config`, reserved to admins, with yes / no only), the scheduled jobs and their last run, the migrations that answer, and whether plays carry a country, a device and an IP fingerprint. Points that need attention are listed on top. The public `GET /api/health` stays as it is (booleans only).
+
+Scheduled jobs (fraud detection every day, retention purge, pg_cron log cleanup) are created by `API/supabase/migrations/20261024000000_scheduled_jobs.sql`: enable pg_cron in Supabase (Database > Extensions), then apply it in the SQL editor. The page reads their state through `admin_scheduled_jobs()`.
+
 ## Deploy (Vercel)
 
 Import this repo on Vercel (framework: Next.js, nothing else to configure) and add the three environment variables above. Put `SUPABASE_SECRET_KEY` in Production only and mark it Sensitive. `NEXT_PUBLIC_*` values are baked in at build time: redeploy after changing them. Every push to `main` deploys.

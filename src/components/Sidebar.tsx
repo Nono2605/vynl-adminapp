@@ -84,6 +84,14 @@ const ICONS = {
       <path d="M12 10v4.5M12 17.25v.01" />
     </svg>
   ),
+  system: (
+    <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+      <rect x="3.5" y="4" width="17" height="6.5" rx="2" />
+      <rect x="3.5" y="13.5" width="17" height="6.5" rx="2" />
+      <path d="M7 7.25h.01M7 16.75h.01" />
+      <path d="M11 7.25h6M11 16.75h6" />
+    </svg>
+  ),
   audit: (
     <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
       <rect x="5" y="3.5" width="14" height="17" rx="2.5" />
@@ -107,6 +115,7 @@ const NAV_ITEMS = [
   { href: "/payouts", label: "Payouts", icon: ICONS.payouts, desktopOnly: true },
   { href: "/fraud", label: "Fraud", icon: ICONS.fraud, desktopOnly: true },
   { href: "/audit", label: "Audit log", icon: ICONS.audit, desktopOnly: true },
+  { href: "/system", label: "System", icon: ICONS.system, desktopOnly: true },
 ] as const;
 
 export function Sidebar() {
