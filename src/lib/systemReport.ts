@@ -10,10 +10,27 @@ export interface ApiConfig {
     webapp_shared_secret: boolean;
     stripe_secret_key: boolean;
     stripe_webhook_secret: boolean;
+    // Absents d'une API déployée avant le CDN : on ne dit rien tant que l'API ne les donne pas.
+    cdn_token_secret?: boolean;
   };
   stripe: { mode: "test" | "live" | null; allow_live: boolean; automatic_tax: boolean };
   checkout_return_host: string | null;
+  cdn?: { active: boolean; host: string | null; configured_host: string | null };
   cors_allowed_origins: string[];
+}
+
+// Ce que rend admin_transcode_status() (migration 20261025000000_audio_renditions.sql) : l'état des versions AAC du CDN.
+export interface TranscodeStatus {
+  queued: number;
+  running: number;
+  done: number;
+  failed: number;
+  oldest_open_at: string | null;
+  last_error: string | null;
+  renditions: number;
+  tracks_with_cdn: number;
+  tracks_with_audio: number;
+  pending_deletions: number;
 }
 
 export interface ScheduledJob {
@@ -35,6 +52,10 @@ export const EXPECTED_JOBS = [
 ] as const;
 
 export const JOBS_MIGRATION = "20261024000000_scheduled_jobs.sql";
+export const RENDITIONS_MIGRATION = "20261025000000_audio_renditions.sql";
+
+// Une tâche de transcodage en attente depuis plus longtemps que ça : le worker ne tourne pas, ou il est bloqué.
+export const TRANSCODE_STALE_HOURS = 6;
 
 export interface Warning {
   level: "warn" | "info";
@@ -53,10 +74,12 @@ export interface SystemInput {
   // null : la fonction admin_scheduled_jobs() n'existe pas (migration pas appliquée) ; [] : pg_cron sans tâche.
   jobs: ScheduledJob[] | null;
   schema: Record<string, boolean> | null;
+  // undefined : pas demandé. null : la fonction admin_transcode_status() n'existe pas (migration pas appliquée).
+  transcode?: TranscodeStatus | null;
   now: Date;
 }
 
-export function systemWarnings({ config, jobs, schema, now }: SystemInput): Warning[] {
+export function systemWarnings({ config, jobs, schema, transcode, now }: SystemInput): Warning[] {
   const out: Warning[] = [];
 
   if (config) {
@@ -92,6 +115,19 @@ export function systemWarnings({ config, jobs, schema, now }: SystemInput): Warn
     if (!config.checkout_return_host) {
       out.push({ level: "warn", text: "The checkout return address is not set (CHECKOUT_RETURN_BASE_URL): customers cannot come back from Stripe." });
     }
+    if (config.cdn) {
+      if (!config.cdn.active) {
+        if (config.cdn.configured_host && !config.secrets.cdn_token_secret) {
+          out.push({ level: "warn", text: "The audio CDN address is set but CDN_TOKEN_SECRET is not: listening still goes through Supabase." });
+        } else if (!config.cdn.configured_host && config.secrets.cdn_token_secret) {
+          out.push({ level: "warn", text: "CDN_TOKEN_SECRET is set but CDN_BASE_URL is missing or invalid (it must start with https://): listening still goes through Supabase." });
+        } else if (config.cdn.configured_host) {
+          out.push({ level: "warn", text: `The audio CDN address is not valid (CDN_BASE_URL, host ${config.cdn.configured_host}): it must start with https://.` });
+        } else {
+          out.push({ level: "info", text: "Listening is served by Supabase: the audio CDN is not set up on the API yet (CDN_BASE_URL, CDN_TOKEN_SECRET)." });
+        }
+      }
+    }
     if (config.entitlement_mode === "live") {
       out.push({ level: "info", text: "Listening rights follow subscriptions (ENTITLEMENT_MODE is live): plays are no longer all beta." });
     }
@@ -118,6 +154,25 @@ export function systemWarnings({ config, jobs, schema, now }: SystemInput): Warn
       if (age !== null && age > expected.maxAgeHours) {
         out.push({ level: "warn", text: `${expected.label} has not run for ${Math.round(age)} hours.` });
       }
+    }
+  }
+
+  if (transcode === null) {
+    out.push({ level: "info", text: `Audio renditions are not tracked yet: apply ${RENDITIONS_MIGRATION} (API repository) in the Supabase SQL editor.` });
+  } else if (transcode) {
+    if (transcode.failed > 0) {
+      out.push({
+        level: "warn",
+        text: `${transcode.failed} audio file${transcode.failed === 1 ? "" : "s"} could not be transcoded${transcode.last_error ? `. Last error: ${transcode.last_error}` : "."}`,
+      });
+    }
+    const waiting = transcode.queued + transcode.running;
+    const age = hoursSince(transcode.oldest_open_at, now);
+    if (waiting > 0 && age !== null && age > TRANSCODE_STALE_HOURS) {
+      out.push({
+        level: "warn",
+        text: `The transcoding queue is not moving: ${waiting} file${waiting === 1 ? "" : "s"} waiting, the oldest for ${Math.round(age)} hours. Is the worker running on Render?`,
+      });
     }
   }
 

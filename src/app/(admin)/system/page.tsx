@@ -6,7 +6,7 @@ import { formatDateTime } from "@/lib/format";
 import { collectionChecks, schemaChecks } from "@/lib/healthChecks";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { EXPECTED_JOBS, systemWarnings, type ApiConfig, type ScheduledJob } from "@/lib/systemReport";
+import { EXPECTED_JOBS, systemWarnings, type ApiConfig, type ScheduledJob, type TranscodeStatus } from "@/lib/systemReport";
 
 // « Réglé » ou « manquant » : jamais la valeur d'un secret (l'API ne la donne pas).
 function Flag({ on, onLabel = "set", offLabel = "missing" }: { on: boolean; onLabel?: string; offLabel?: string }) {
@@ -22,16 +22,21 @@ function uptime(seconds: number): string {
 export default async function SystemPage() {
   await requireAdmin();
 
-  const [config, jobsResult, schema, collection] = await Promise.all([
+  const [config, jobsResult, transcodeResult, schema, collection] = await Promise.all([
     apiGet<ApiConfig>("/admin/config"),
     supabaseAdmin().rpc("admin_scheduled_jobs"),
+    supabaseAdmin().rpc("admin_transcode_status"),
     schemaChecks().catch(() => null),
     collectionChecks().catch(() => null),
   ]);
 
   const apiConfig = config.ok ? config.data : null;
   const jobs = jobsResult.error ? null : ((jobsResult.data ?? []) as ScheduledJob[]);
-  const warnings = systemWarnings({ config: apiConfig, jobs, schema, now: new Date() });
+  // La fonction rend une ligne ; une erreur veut dire que la migration des versions AAC n'est pas appliquée.
+  const transcode = transcodeResult.error
+    ? null
+    : ((Array.isArray(transcodeResult.data) ? transcodeResult.data[0] : transcodeResult.data) as TranscodeStatus | undefined) ?? null;
+  const warnings = systemWarnings({ config: apiConfig, jobs, schema, transcode, now: new Date() });
   const problems = warnings.filter((warning) => warning.level === "warn");
   const notes = warnings.filter((warning) => warning.level === "info");
 
@@ -142,8 +147,55 @@ export default async function SystemPage() {
                 </td>
                 <td className="muted">Verifies the events Stripe sends</td>
               </tr>
+              {apiConfig.secrets.cdn_token_secret !== undefined && (
+                <tr>
+                  <td className="cell-main">CDN_TOKEN_SECRET</td>
+                  <td>
+                    <Flag on={apiConfig.secrets.cdn_token_secret} />
+                  </td>
+                  <td className="muted">Signs listening addresses for the audio CDN (same value as on the Cloudflare Worker)</td>
+                </tr>
+              )}
             </tbody>
           </table>
+        </div>
+      ) : (
+        <p className="muted">Not available.</p>
+      )}
+
+      <h2 className="section-title section-gap">Audio delivery (CDN)</h2>
+      {apiConfig?.cdn || transcode ? (
+        <div className="dash-card">
+          <dl className="kv">
+            <dt>CDN used by the API</dt>
+            <dd>
+              {apiConfig?.cdn ? (
+                <>
+                  <Flag on={apiConfig.cdn.active} onLabel="on" offLabel="off" /> {apiConfig.cdn.host ?? apiConfig.cdn.configured_host ?? ""}
+                </>
+              ) : (
+                <span className="muted">unknown</span>
+              )}
+            </dd>
+            {transcode && (
+              <>
+                <dt>Tracks served by the CDN</dt>
+                <dd>
+                  {transcode.tracks_with_cdn} of {transcode.tracks_with_audio}
+                </dd>
+                <dt>AAC versions ready</dt>
+                <dd>{transcode.renditions}</dd>
+                <dt>Transcoding queue</dt>
+                <dd>
+                  {transcode.queued} waiting, {transcode.running} running, {transcode.done} done, {transcode.failed} failed
+                </dd>
+                <dt>Oldest file waiting since</dt>
+                <dd>{transcode.oldest_open_at ? formatDateTime(transcode.oldest_open_at) : <span className="muted">nothing waiting</span>}</dd>
+                <dt>CDN files to delete</dt>
+                <dd>{transcode.pending_deletions}</dd>
+              </>
+            )}
+          </dl>
         </div>
       ) : (
         <p className="muted">Not available.</p>

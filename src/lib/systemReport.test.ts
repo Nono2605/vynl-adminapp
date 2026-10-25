@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { EXPECTED_JOBS, hoursSince, systemWarnings, type ApiConfig, type ScheduledJob } from "./systemReport.ts";
+import { EXPECTED_JOBS, hoursSince, systemWarnings, TRANSCODE_STALE_HOURS, type ApiConfig, type ScheduledJob, type TranscodeStatus } from "./systemReport.ts";
 
 const NOW = new Date("2026-10-24T12:00:00Z");
 
@@ -8,9 +8,10 @@ const goodConfig: ApiConfig = {
   deploy: { commit: "3e662c9", node: "v22.1.0", uptime_seconds: 100 },
   entitlement_mode: "beta",
   auth_local_verify: true,
-  secrets: { ip_hash_secret: true, webapp_shared_secret: true, stripe_secret_key: true, stripe_webhook_secret: true },
+  secrets: { ip_hash_secret: true, webapp_shared_secret: true, stripe_secret_key: true, stripe_webhook_secret: true, cdn_token_secret: true },
   stripe: { mode: "test", allow_live: false, automatic_tax: true },
   checkout_return_host: "app.vynl.ch",
+  cdn: { active: true, host: "cdn.vynl.li", configured_host: "cdn.vynl.li" },
   cors_allowed_origins: ["https://app.vynl.ch"],
 };
 
@@ -117,5 +118,79 @@ describe("systemWarnings", () => {
 
   it("sans réponse de l'API, on ne devine rien sur sa configuration", () => {
     assert.deepEqual(systemWarnings({ config: null, jobs: goodJobs, schema: null, now: NOW }), []);
+  });
+
+  describe("CDN audio", () => {
+    const withCdn = (cdn: ApiConfig["cdn"], secret: boolean): ApiConfig => ({ ...goodConfig, cdn, secrets: { ...goodConfig.secrets, cdn_token_secret: secret } });
+    const warn = (config: ApiConfig) => systemWarnings({ config, jobs: goodJobs, schema: null, now: NOW });
+
+    it("actif : rien à signaler", () => {
+      assert.deepEqual(warn(goodConfig), []);
+    });
+
+    it("une API déployée avant le CDN (champ absent) : on ne dit rien", () => {
+      const { cdn: _cdn, ...old } = goodConfig;
+      void _cdn;
+      assert.deepEqual(warn(old as ApiConfig), []);
+    });
+
+    it("ni adresse ni secret : simple information", () => {
+      const warnings = warn(withCdn({ active: false, host: null, configured_host: null }, false));
+      assert.deepEqual(warnings.map((w) => w.level), ["info"]);
+      assert.match(warnings[0].text, /served by Supabase/);
+    });
+
+    it("adresse sans secret, ou secret sans adresse : à corriger", () => {
+      const noSecret = warn(withCdn({ active: false, host: null, configured_host: "cdn.vynl.li" }, false));
+      assert.deepEqual(noSecret.map((w) => w.level), ["warn"]);
+      assert.match(noSecret[0].text, /CDN_TOKEN_SECRET is not/);
+      const noUrl = warn(withCdn({ active: false, host: null, configured_host: null }, true));
+      assert.deepEqual(noUrl.map((w) => w.level), ["warn"]);
+      assert.match(noUrl[0].text, /CDN_BASE_URL is missing/);
+    });
+
+    it("adresse et secret réglés mais adresse refusée (http) : à corriger", () => {
+      const warnings = warn(withCdn({ active: false, host: null, configured_host: "cdn.vynl.li" }, true));
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0].text, /not valid/);
+    });
+  });
+
+  describe("transcodage", () => {
+    const status = (over: Partial<TranscodeStatus> = {}): TranscodeStatus => ({
+      queued: 0, running: 0, done: 10, failed: 0, oldest_open_at: null, last_error: null,
+      renditions: 20, tracks_with_cdn: 10, tracks_with_audio: 10, pending_deletions: 0, ...over,
+    });
+    const check = (transcode: TranscodeStatus | null) => systemWarnings({ config: null, jobs: goodJobs, schema: null, transcode, now: NOW });
+
+    it("pas demandé, ou tout est fait : rien à signaler", () => {
+      assert.deepEqual(systemWarnings({ config: null, jobs: goodJobs, schema: null, now: NOW }), []);
+      assert.deepEqual(check(status()), []);
+    });
+
+    it("la migration manque : on dit laquelle appliquer", () => {
+      const warnings = check(null);
+      assert.equal(warnings.length, 1);
+      assert.equal(warnings[0].level, "info");
+      assert.match(warnings[0].text, /20261025000000_audio_renditions\.sql/);
+    });
+
+    it("des fichiers en échec : alerte avec la dernière erreur", () => {
+      const warnings = check(status({ failed: 2, last_error: "ffmpeg a échoué" }));
+      assert.equal(warnings.length, 1);
+      assert.match(warnings[0].text, /2 audio files could not be transcoded\. Last error: ffmpeg a échoué/);
+      assert.match(check(status({ failed: 1 }))[0].text, /1 audio file could not be transcoded\./);
+    });
+
+    it("une file qui avance (tâche récente) n'alerte pas ; une file ancienne alerte", () => {
+      assert.deepEqual(check(status({ queued: 5, oldest_open_at: hoursAgo(1) })), []);
+      const stuck = check(status({ queued: 5, running: 1, oldest_open_at: hoursAgo(TRANSCODE_STALE_HOURS + 2) }));
+      assert.equal(stuck.length, 1);
+      assert.match(stuck[0].text, /6 files waiting, the oldest for 8 hours\. Is the worker running/);
+    });
+
+    it("une tâche ancienne mais plus rien en attente n'alerte pas", () => {
+      assert.deepEqual(check(status({ queued: 0, running: 0, oldest_open_at: hoursAgo(50) })), []);
+    });
   });
 });
