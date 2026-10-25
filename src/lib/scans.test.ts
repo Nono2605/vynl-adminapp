@@ -80,3 +80,57 @@ describe("describeScan : les contrôles automatiques de l'envoi en relecture", (
     assert.match(described.text, /did not answer/);
   });
 });
+
+describe("describeScan : un résultat « ok » ne décrit jamais une alerte", () => {
+  for (const kind of ["duplicate_audio", "blocked_audio", "similar_title"]) {
+    it(`${kind} : « ok » dit qu'il n'y a rien, sans le texte de l'alerte`, () => {
+      const described = describeScan({ check_kind: kind, score: null, detail: {}, result: "ok" });
+      assert.match(described.text, /^(No |The file is not)/);
+      assert.doesNotMatch(described.text, /byte for byte|Likely a copy|Listen to both/);
+    });
+  }
+
+  it("les titres restent ceux du contrôle", () => {
+    assert.equal(describeScan({ check_kind: "duplicate_audio", score: null, detail: {}, result: "ok" }).title, "Same audio file as another artist's track");
+  });
+
+  it("un contrôle indisponible l'emporte sur « ok » et dit pourquoi", () => {
+    const described = describeScan({ check_kind: "fingerprint", score: null, detail: { unavailable: true, message: "monthly request cap reached (300 of 300 used)" }, result: "warn" });
+    assert.match(described.title, /could not run/);
+    assert.match(described.text, /monthly request cap reached/);
+  });
+});
+
+describe("describeScan : empreinte acoustique (ACRCloud)", () => {
+  const found = {
+    samples: [44, 94, 144],
+    matches: [
+      { title: "Drawing", artists: ["Anyma"], score: 92, seen_at_seconds: [44, 94] },
+      { title: "Other", artists: ["X"], score: 70, seen_at_seconds: [144] },
+    ],
+  };
+
+  it("une reconnaissance : le titre, l'artiste, le score, où elle a été entendue, et d'écouter les deux", () => {
+    const described = describeScan({ check_kind: "fingerprint", score: 92, detail: found, result: "warn" });
+    assert.equal(described.title, "Known recordings (audio fingerprint)");
+    assert.match(described.text, /Looks like “Drawing” by Anyma \(score 92, heard at 44s, 94s\)/);
+    assert.match(described.text, /and 1 other/);
+    assert.match(described.text, /Listen to both/);
+  });
+
+  it("rien de reconnu : ok, avec le nombre d'extraits", () => {
+    const described = describeScan({ check_kind: "fingerprint", score: null, detail: { samples: [4, 14, 24], matches: [] }, result: "ok" });
+    assert.equal(described.text, "No known recording recognised in 3 samples.");
+  });
+
+  it("un indice faible sous le seuil : ok, le score du plus faible est dit", () => {
+    const described = describeScan({ check_kind: "fingerprint", score: 40, detail: { samples: [4], matches: [{ title: "Hint", artists: [], score: 40 }] }, result: "ok" });
+    assert.match(described.text, /No known recording recognised in 1 sample\./);
+    assert.match(described.text, /weakest hint scored 40/);
+  });
+
+  it("un résultat repris d'un contrôle précédent le dit", () => {
+    const described = describeScan({ check_kind: "fingerprint", score: 92, detail: { ...found, reused: true }, result: "warn" });
+    assert.match(described.text, /reused from an earlier check/);
+  });
+});

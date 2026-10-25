@@ -335,13 +335,15 @@ export default async function TrackReviewPage({
                 <span className="checklist__detail">{check.detail}</span>
               </li>
             ))}
-            <li>
-              <span className="checklist__label">Audio fingerprint</span>
-              <span className="status status--soon">Coming</span>
-              <span className="checklist__detail">
-                Matching against known recordings will appear here once a provider is connected. Until then, listen to the track.
-              </span>
-            </li>
+            {!scanRows.some((scan) => scan.check_kind === "fingerprint") && (
+              <li>
+                <span className="checklist__label">Audio fingerprint</span>
+                <span className="status status--soon">Not active</span>
+                <span className="checklist__detail">
+                  Matching against known recordings needs the ACRCloud settings on the API. Until then, listen to the track.
+                </span>
+              </li>
+            )}
           </ul>
           <p className="muted" style={{ marginTop: "var(--space-sm)" }}>
             Listen to the track and read the declaration before deciding.
