@@ -77,6 +77,29 @@ export async function schemaChecks(): Promise<Record<string, boolean>> {
       db.rpc("fraud_event_plays", { p_event_id: "00000000-0000-0000-0000-000000000000" }).then((result) => !result.error),
     ]);
 
+  // Migrations de l'API plus récentes, ou qui n'étaient pas contrôlées (un oubli s'est vu à la purge planifiée, qui
+  // échouait faute de la fonction stripe_events_purge). Les migrations qui ne touchent que des réglages de stockage
+  // (limites des buckets) ne se voient pas d'ici, et celles des versions AAC et des tâches planifiées ont leur propre
+  // section sur la page « System ».
+  const [stripePurge, privacyRequests, nameReview, releaseDetails, likeCounts] = await Promise.all([
+    // Fonctions de purge des événements Stripe (20261025000001, extraites de 20261014000003). Le reste de
+    // 20261014000003 (clé des battements, conservation à 7 jours) est volontairement en attente du juriste :
+    // on ne le contrôle donc pas ici.
+    db.rpc("stripe_events_purge_preview").then((result) => !result.error),
+    // 20261014000004
+    selectable("privacy_requests", "id, kind, status"),
+    // 20261017000000
+    selectable("artists", "name_status, name_review_note, name_reviewed_at"),
+    // 20261018000000
+    Promise.all([
+      selectable("tracks", "extra_genre_codes, tags"),
+      selectable("albums", "description, label, copyright_line"),
+      selectable("track_credits", "id, track_id, role"),
+    ]).then((r) => r.every(Boolean)),
+    // 20261018100000 : fonction en lecture seule, une liste vide donne zéro ligne.
+    db.rpc("track_like_counts", { p_track_ids: [] }).then((result) => !result.error),
+  ]);
+
   return {
     // Migration de l'admin (supabase/migrations/20261010100000_admin_actions.sql)
     admin_actions: adminAuditLog && trackReasons && albumReasons && declarationNotes,
@@ -97,6 +120,11 @@ export async function schemaChecks(): Promise<Record<string, boolean>> {
     listener_preferences: preferences,
     creator_stats: stats,
     catalog_numbers_and_artist_names: numbers,
+    stripe_events_purge: stripePurge,
+    privacy_requests: privacyRequests,
+    artist_name_review: nameReview,
+    release_details: releaseDetails,
+    track_like_counts: likeCounts,
   };
 }
 
