@@ -81,7 +81,7 @@ export async function schemaChecks(): Promise<Record<string, boolean>> {
   // échouait faute de la fonction stripe_events_purge). Les migrations qui ne touchent que des réglages de stockage
   // (limites des buckets) ne se voient pas d'ici, et celles des versions AAC et des tâches planifiées ont leur propre
   // section sur la page « System ».
-  const [stripePurge, privacyRequests, nameReview, releaseDetails, likeCounts] = await Promise.all([
+  const [stripePurge, privacyRequests, nameReview, releaseDetails, likeCounts, rightsClaims] = await Promise.all([
     // Fonctions de purge des événements Stripe (20261025000001, extraites de 20261014000003). Le reste de
     // 20261014000003 (clé des battements, conservation à 7 jours) est volontairement en attente du juriste :
     // on ne le contrôle donc pas ici.
@@ -98,6 +98,8 @@ export async function schemaChecks(): Promise<Record<string, boolean>> {
     ]).then((r) => r.every(Boolean)),
     // 20261018100000 : fonction en lecture seule, une liste vide donne zéro ligne.
     db.rpc("track_like_counts", { p_track_ids: [] }).then((result) => !result.error),
+    // 20261025000002 : signalements des ayants droit et liste de blocage des fichiers retirés.
+    Promise.all([selectable("rights_claims", "id, claim_number, status"), selectable("blocked_files", "id, checksum")]).then((r) => r.every(Boolean)),
   ]);
 
   return {
@@ -125,6 +127,7 @@ export async function schemaChecks(): Promise<Record<string, boolean>> {
     artist_name_review: nameReview,
     release_details: releaseDetails,
     track_like_counts: likeCounts,
+    rights_claims: rightsClaims,
   };
 }
 

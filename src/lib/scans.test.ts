@@ -40,6 +40,14 @@ describe("needsReview", () => {
   });
 });
 
+describe("describeScan : fichier bloqué", () => {
+  it("dit que le fichier est sur la liste de blocage, sans parler d'un artiste ni d'un signalement précis", () => {
+    const described = describeScan({ check_kind: "blocked_file", score: 1, detail: { reason: "blocklist" } });
+    assert.equal(described.title, "File on the block list");
+    assert.match(described.text, /rights holder claim/);
+  });
+});
+
 describe("isMissingTable", () => {
   it("reconnaît une table absente, pas les autres erreurs", () => {
     assert.equal(isMissingTable({ code: "42P01" }), true);

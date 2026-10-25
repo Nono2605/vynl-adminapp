@@ -19,7 +19,8 @@ export type AuditTargetType =
   | "fraud_event"
   | "billing"
   | "scan"
-  | "artist";
+  | "artist"
+  | "rights_claim";
 
 export interface AuditTarget {
   type: AuditTargetType;

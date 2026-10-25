@@ -105,3 +105,25 @@ describe("sumSplits", () => {
     assert.equal(sumSplits([{ percentage: "60" }, { percentage: 40 }]), 100);
   });
 });
+
+describe("morceau similaire d'un autre artiste (spec 15.5, D4)", () => {
+  const similar = (similarTitleCount?: number) => trackChecks({ ...ready, similarTitleCount }).find((c) => c.key === "similar_title");
+
+  it("pas cherché : aucun contrôle affiché", () => {
+    assert.equal(similar(undefined), undefined);
+  });
+
+  it("aucun morceau similaire : ok", () => {
+    assert.equal(similar(0)?.state, "ok");
+  });
+
+  it("un ou plusieurs morceaux similaires : un avertissement, au singulier ou au pluriel", () => {
+    assert.equal(similar(1)?.state, "warn");
+    assert.match(similar(1)!.detail, /^1 track by other artists/);
+    assert.match(similar(3)!.detail, /^3 tracks by other artists/);
+  });
+
+  it("un avertissement ne bloque JAMAIS la publication : la relecture humaine tranche", () => {
+    assert.deepEqual(blocking({ similarTitleCount: 5 }), []);
+  });
+});

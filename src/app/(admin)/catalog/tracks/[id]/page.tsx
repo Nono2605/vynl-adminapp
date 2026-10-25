@@ -16,6 +16,7 @@ import { first, isUuid, pick, type SearchParams } from "@/lib/query";
 import { loadQueue, skipPath } from "@/lib/reviewQueue";
 import { positionOf } from "@/lib/reviewQueueLogic";
 import { SCAN_COLUMNS, isMissingTable, type ScanRow } from "@/lib/scans";
+import { loadSimilarTracks, type SimilarDb } from "@/lib/similarTracks";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -158,12 +159,21 @@ export default async function TrackReviewPage({
   const details = await loadTrackDetails(db, id);
   const otherGenres = details ? await Promise.all(details.extraGenreCodes.map((code) => genreLabel(db, code))) : [];
 
+  const similar = artist
+    ? await loadSimilarTracks(db as unknown as SimilarDb, {
+        id,
+        title: row.title,
+        duration_seconds: row.duration_seconds,
+        artist_id: artist.id,
+      })
+    : null;
   const checks = trackChecks({
     durationSeconds: row.duration_seconds,
     fileCount: fileRows.length,
     declaration: declarationState(declarationRows[0]),
     genre: genres ? genreCode : undefined,
     splitsTotal: sumSplits(splitRows),
+    similarTitleCount: similar?.length,
   });
   const blocking = blockers(checks);
   const splitsTotal = sumSplits(splitRows);

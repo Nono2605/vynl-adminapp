@@ -22,7 +22,7 @@ export type DeclarationState = "none" | "ai" | "held" | "rejected";
 export type CheckState = "ok" | "warn" | "fail";
 
 export interface Check {
-  key: "audio" | "duration" | "declaration" | "genre" | "splits";
+  key: "audio" | "duration" | "declaration" | "genre" | "splits" | "similar_title";
   label: string;
   state: CheckState;
   detail: string;
@@ -36,6 +36,8 @@ export interface TrackCheckInput {
   genre?: string | null;
   // Somme des parts (%) si des parts existent, null s'il n'y en a aucune.
   splitsTotal: number | null;
+  // Morceaux d'AUTRES artistes de même titre et de durée voisine (spec 15.5, D4). undefined = pas cherché : pas de contrôle.
+  similarTitleCount?: number;
 }
 
 // Une déclaration écartée par un administrateur (« rejected ») l'emporte ; sinon la provenance
@@ -93,6 +95,20 @@ export function trackChecks(input: TrackCheckInput): Check[] {
       input.genre
         ? { key: "genre", label: "Genre", state: "ok", detail: "Chosen by the creator" }
         : { key: "genre", label: "Genre", state: "warn", detail: "No genre chosen: the track is missing from the style statistics" }
+    );
+  }
+
+  // D4 : un simple avertissement pour la relecture (deux œuvres peuvent légitimement partager un titre).
+  if (input.similarTitleCount !== undefined) {
+    checks.push(
+      input.similarTitleCount > 0
+        ? {
+            key: "similar_title",
+            label: "Similar track",
+            state: "warn",
+            detail: `${input.similarTitleCount} track${input.similarTitleCount > 1 ? "s" : ""} by other artists with the same title and almost the same length: check that this is not a copy`,
+          }
+        : { key: "similar_title", label: "Similar track", state: "ok", detail: "No track by another artist with the same title and length" }
     );
   }
 

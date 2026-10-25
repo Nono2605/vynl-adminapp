@@ -39,6 +39,11 @@ export function describeScan(scan: Pick<ScanRow, "check_kind" | "score" | "detai
         title: "Same audio file as another artist's track",
         text: "The upload was refused: the file is identical, byte for byte, to one already on Vynl.",
       };
+    case "blocked_file":
+      return {
+        title: "File on the block list",
+        text: "The upload was refused: this exact file was removed after a rights holder claim (Claims page).",
+      };
     case "name_similarity": {
       const name = typeof detail.matched_name === "string" ? detail.matched_name : "another artist";
       const score = scan.score === null || scan.score === undefined ? "" : ` (similarity ${Number(scan.score).toFixed(2)})`;

@@ -2,6 +2,7 @@ import "server-only";
 import { ActionError } from "@/lib/actions";
 import { loadTrackGenres } from "@/lib/genres";
 import { blockers, declarationState, sumSplits, trackChecks, type Check } from "@/lib/moderation";
+import { loadSimilarTracks, type SimilarDb } from "@/lib/similarTracks";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export interface TrackForReview {
@@ -40,12 +41,19 @@ export async function loadTrackChecks(trackId: string): Promise<{ track: TrackFo
   if (!track.data) throw new ActionError("Track not found.");
 
   const genres = await loadTrackGenres(db, [trackId]);
+  const similar = await loadSimilarTracks(db as unknown as SimilarDb, {
+    id: trackId,
+    title: track.data.title,
+    duration_seconds: track.data.duration_seconds,
+    artist_id: track.data.artist_id,
+  });
   const checks = trackChecks({
     durationSeconds: track.data.duration_seconds,
     fileCount: files.count ?? 0,
     declaration: declarationState(declarations.data?.[0]),
     genre: genres ? (genres.get(trackId) ?? null) : undefined,
     splitsTotal: sumSplits(splits.data as { percentage: number | string }[] | null),
+    similarTitleCount: similar?.length,
   });
 
   return { track: track.data as TrackForReview, checks, blocking: blockers(checks) };

@@ -84,6 +84,12 @@ const ICONS = {
       <path d="M12 10v4.5M12 17.25v.01" />
     </svg>
   ),
+  claims: (
+    <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+      <path d="M6 21V4" />
+      <path d="M6 5h11.5l-2.5 4 2.5 4H6" />
+    </svg>
+  ),
   system: (
     <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
       <rect x="3.5" y="4" width="17" height="6.5" rx="2" />
@@ -108,6 +114,7 @@ const NAV_ITEMS = [
   { href: "/creators", label: "Creators", icon: ICONS.creators, desktopOnly: false },
   { href: "/catalog", label: "Catalog", icon: ICONS.catalog, desktopOnly: false },
   { href: "/moderation", label: "Moderation", icon: ICONS.moderation, desktopOnly: false },
+  { href: "/claims", label: "Claims", icon: ICONS.claims, desktopOnly: true },
   { href: "/subscriptions", label: "Subscriptions", icon: ICONS.subscriptions, desktopOnly: true },
   { href: "/analytics", label: "Analytics", icon: ICONS.analytics, desktopOnly: true },
   { href: "/plays", label: "Plays", icon: ICONS.plays, desktopOnly: true },
