@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { EXPECTED_JOBS, hoursSince, systemWarnings, TRANSCODE_STALE_HOURS, type ApiConfig, type ScheduledJob, type TranscodeStatus } from "./systemReport.ts";
+import { EXPECTED_JOBS, FINGERPRINT_CAP_WARN_RATIO, fingerprintWarnings, hoursSince, systemWarnings, TRANSCODE_STALE_HOURS, type ApiConfig, type ScheduledJob, type TranscodeStatus } from "./systemReport.ts";
 
 const NOW = new Date("2026-10-24T12:00:00Z");
 
@@ -194,3 +194,77 @@ describe("systemWarnings", () => {
     });
   });
 });
+
+describe("fingerprintWarnings : le contrôle d'empreinte ACRCloud", () => {
+  type Fingerprint = NonNullable<ApiConfig["fingerprint"]>;
+  const active: Fingerprint = {
+    active: true,
+    host: "identify-eu-west-1.acrcloud.com",
+    missing: [],
+    warn_score: 60,
+    fail_score: null,
+    monthly_cap: 300,
+    requests_this_month: 12,
+  };
+  const off = (missing: string[]): Fingerprint => ({ ...active, active: false, host: null, missing, requests_this_month: null });
+
+  it("une API qui ne le rapporte pas encore : rien n'est dit", () => {
+    assert.deepEqual(fingerprintWarnings(undefined), []);
+  });
+
+  it("actif et loin du plafond : rien à signaler", () => {
+    assert.deepEqual(fingerprintWarnings(active), []);
+  });
+
+  it("pas posé du tout : une simple note, pas une alerte (le contrôle est facultatif)", () => {
+    const warnings = fingerprintWarnings(off(["ACRCLOUD_HOST", "ACRCLOUD_ACCESS_KEY", "ACRCLOUD_ACCESS_SECRET"]));
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].level, "info");
+    assert.match(warnings[0].text, /not set up on the API/);
+  });
+
+  it("à moitié posé : une alerte qui nomme ce qui manque", () => {
+    const warnings = fingerprintWarnings(off(["ACRCLOUD_ACCESS_SECRET"]));
+    assert.equal(warnings[0].level, "warn");
+    assert.match(warnings[0].text, /half set up/);
+    assert.match(warnings[0].text, /ACRCLOUD_ACCESS_SECRET/);
+  });
+
+  it("à 80 % du plafond : on prévient ; juste en dessous : non", () => {
+    const limit = Math.ceil(300 * FINGERPRINT_CAP_WARN_RATIO);
+    assert.deepEqual(fingerprintWarnings({ ...active, requests_this_month: limit - 1 }), []);
+    const warnings = fingerprintWarnings({ ...active, requests_this_month: limit });
+    assert.equal(warnings[0].level, "warn");
+    assert.match(warnings[0].text, /nearly reached \(240 of 300/);
+  });
+
+  it("au plafond (ou au-delà) : alerte qui dit ce qui se passe et où le relever", () => {
+    for (const used of [300, 450]) {
+      const [warning] = fingerprintWarnings({ ...active, requests_this_month: used });
+      assert.equal(warning.level, "warn");
+      assert.match(warning.text, /cap is reached/);
+      assert.match(warning.text, /without the fingerprint/);
+      assert.match(warning.text, /ACRCLOUD_MONTHLY_REQUESTS/);
+    }
+  });
+
+  it("compteur inconnu : aucune alerte de plafond inventée", () => {
+    assert.deepEqual(fingerprintWarnings({ ...active, requests_this_month: null }), []);
+  });
+
+  it("un plafond à 0 (contrôle coupé) est atteint tout de suite", () => {
+    assert.match(fingerprintWarnings({ ...active, monthly_cap: 0, requests_this_month: 0 })[0].text, /cap is reached/);
+  });
+
+  it("branché sur systemWarnings : le rapport de l'API est pris en compte", () => {
+    const warnings = systemWarnings({
+      config: { ...goodConfig, fingerprint: { ...active, requests_this_month: 300 } },
+      jobs: goodJobs,
+      schema: null,
+      now: NOW,
+    });
+    assert.ok(warnings.some((w) => /ACRCloud monthly cap is reached/.test(w.text)));
+    assert.ok(!systemWarnings({ config: goodConfig, jobs: goodJobs, schema: null, now: NOW }).some((w) => /ACRCloud|fingerprint/.test(w.text)));
+  });
+});
+

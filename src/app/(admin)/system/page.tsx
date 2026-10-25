@@ -201,6 +201,59 @@ export default async function SystemPage() {
         <p className="muted">Not available.</p>
       )}
 
+      <h2 className="section-title section-gap">Audio fingerprint (ACRCloud)</h2>
+      {apiConfig?.fingerprint ? (
+        <div className="dash-card">
+          <dl className="kv">
+            <dt>Check on every submitted track</dt>
+            <dd>
+              <Flag on={apiConfig.fingerprint.active} onLabel="on" offLabel="off" /> {apiConfig.fingerprint.host ?? ""}
+              {!apiConfig.fingerprint.active && apiConfig.fingerprint.missing.length > 0 && (
+                <span className="muted"> to set on the API: {apiConfig.fingerprint.missing.join(", ")}</span>
+              )}
+            </dd>
+            {apiConfig.fingerprint.active && (
+              <>
+                <dt>Requests sent this month</dt>
+                <dd>
+                  {apiConfig.fingerprint.requests_this_month === null ? (
+                    <span className="muted">unknown</span>
+                  ) : (
+                    <>
+                      {apiConfig.fingerprint.requests_this_month} of {apiConfig.fingerprint.monthly_cap}{" "}
+                      <span className="muted">
+                        ({Math.round((apiConfig.fingerprint.requests_this_month / Math.max(1, apiConfig.fingerprint.monthly_cap)) * 100)}%)
+                      </span>
+                    </>
+                  )}
+                </dd>
+                <dt>Monthly cap</dt>
+                <dd>
+                  {apiConfig.fingerprint.monthly_cap} requests <span className="muted">(ACRCLOUD_MONTHLY_REQUESTS; about 3 per track)</span>
+                </dd>
+                <dt>Warning from score</dt>
+                <dd>
+                  {apiConfig.fingerprint.warn_score} of 100 <span className="muted">(ACRCLOUD_WARN_SCORE)</span>
+                </dd>
+                <dt>Automatic refusal</dt>
+                <dd>
+                  {apiConfig.fingerprint.fail_score === null ? (
+                    <span className="muted">never: a recognition is a warning, you decide</span>
+                  ) : (
+                    <>from score {apiConfig.fingerprint.fail_score} (ACRCLOUD_FAIL_SCORE)</>
+                  )}
+                </dd>
+              </>
+            )}
+          </dl>
+          <p className="muted" style={{ marginTop: "var(--space-xs)" }}>
+            The ACRCloud plan itself (its own request quota) is only visible in the ACRCloud console.
+          </p>
+        </div>
+      ) : (
+        <p className="muted">Not available (the API does not report it yet).</p>
+      )}
+
       <h2 className="section-title section-gap">Scheduled jobs</h2>
       <div className="table-wrap">
         <table className="table">

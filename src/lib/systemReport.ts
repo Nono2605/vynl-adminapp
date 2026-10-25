@@ -16,6 +16,18 @@ export interface ApiConfig {
   stripe: { mode: "test" | "live" | null; allow_live: boolean; automatic_tax: boolean };
   checkout_return_host: string | null;
   cdn?: { active: boolean; host: string | null; configured_host: string | null };
+  // Absent d'une API déployée avant le contrôle d'empreinte : on ne dit rien tant que l'API ne le donne pas.
+  fingerprint?: {
+    active: boolean;
+    host: string | null;
+    // Les réglages ACRCloud à poser sur l'API (vide quand il est actif).
+    missing: string[];
+    warn_score: number;
+    fail_score: number | null;
+    monthly_cap: number;
+    // Requêtes déjà envoyées ce mois-ci ; null : pas lu.
+    requests_this_month: number | null;
+  };
   cors_allowed_origins: string[];
 }
 
@@ -79,6 +91,36 @@ export interface SystemInput {
   now: Date;
 }
 
+// À partir de cette part du plafond mensuel, on prévient avant d'être à court.
+export const FINGERPRINT_CAP_WARN_RATIO = 0.8;
+
+// Le contrôle d'empreinte (ACRCloud) : pas posé, à moitié posé, proche du plafond mensuel, ou au plafond.
+export function fingerprintWarnings(fingerprint: ApiConfig["fingerprint"]): Warning[] {
+  if (!fingerprint) return [];
+  if (!fingerprint.active) {
+    if (fingerprint.missing.length > 0 && fingerprint.missing.length < 3) {
+      return [{ level: "warn", text: `The audio fingerprint check is off: ACRCloud is half set up on the API (to set: ${fingerprint.missing.join(", ")}).` }];
+    }
+    if (fingerprint.missing.length === 0) return [];
+    return [{ level: "info", text: "The audio fingerprint check is off: ACRCloud is not set up on the API (ACRCLOUD_HOST, ACRCLOUD_ACCESS_KEY, ACRCLOUD_ACCESS_SECRET)." }];
+  }
+
+  const used = fingerprint.requests_this_month;
+  if (used === null) return [];
+  if (used >= fingerprint.monthly_cap) {
+    return [
+      {
+        level: "warn",
+        text: `The ACRCloud monthly cap is reached (${used} of ${fingerprint.monthly_cap} requests): new tracks are checked without the fingerprint until next month. Raise ACRCLOUD_MONTHLY_REQUESTS on the API if your ACRCloud plan allows it.`,
+      },
+    ];
+  }
+  if (used >= fingerprint.monthly_cap * FINGERPRINT_CAP_WARN_RATIO) {
+    return [{ level: "warn", text: `The ACRCloud monthly cap is nearly reached (${used} of ${fingerprint.monthly_cap} requests).` }];
+  }
+  return [];
+}
+
 export function systemWarnings({ config, jobs, schema, transcode, now }: SystemInput): Warning[] {
   const out: Warning[] = [];
 
@@ -128,6 +170,7 @@ export function systemWarnings({ config, jobs, schema, transcode, now }: SystemI
         }
       }
     }
+    out.push(...fingerprintWarnings(config.fingerprint));
     if (config.entitlement_mode === "live") {
       out.push({ level: "info", text: "Listening rights follow subscriptions (ENTITLEMENT_MODE is live): plays are no longer all beta." });
     }
