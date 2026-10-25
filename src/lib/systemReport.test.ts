@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { EXPECTED_JOBS, FINGERPRINT_CAP_WARN_RATIO, fingerprintWarnings, hoursSince, systemWarnings, TRANSCODE_STALE_HOURS, type ApiConfig, type ScheduledJob, type TranscodeStatus } from "./systemReport.ts";
+import { EXPECTED_JOBS, FINGERPRINT_CAP_WARN_RATIO, fingerprintWarnings, hoursSince, systemWarnings, TRANSCODE_STALE_HOURS, type ApiConfig, type ScanQueueStatus, type ScheduledJob, type TranscodeStatus, scanQueueWarnings, SCAN_STALE_HOURS } from "./systemReport.ts";
 
 const NOW = new Date("2026-10-24T12:00:00Z");
 
@@ -265,6 +265,59 @@ describe("fingerprintWarnings : le contrôle d'empreinte ACRCloud", () => {
     });
     assert.ok(warnings.some((w) => /ACRCloud monthly cap is reached/.test(w.text)));
     assert.ok(!systemWarnings({ config: goodConfig, jobs: goodJobs, schema: null, now: NOW }).some((w) => /ACRCloud|fingerprint/.test(w.text)));
+  });
+});
+
+describe("file des contrôles automatiques", () => {
+  const queue = (over: Partial<ScanQueueStatus> = {}): ScanQueueStatus => ({
+    queued: 0, running: 0, done: 5, failed: 0, oldest_open_at: null, last_failure: null,
+    fingerprint_unavailable_7d: 0, last_fingerprint_problem: null, ...over,
+  });
+
+  it("pas demandé : aucun avertissement", () => {
+    assert.deepEqual(scanQueueWarnings(undefined, true, NOW), []);
+  });
+
+  it("la table n'existe pas : on dit quelle migration appliquer", () => {
+    const warnings = scanQueueWarnings(null, false, NOW);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].level, "warn");
+    assert.match(warnings[0].text, /20261026000000_scan_jobs\.sql/);
+  });
+
+  it("tout va bien : rien à signaler", () => {
+    assert.deepEqual(scanQueueWarnings(queue(), true, NOW), []);
+    assert.deepEqual(scanQueueWarnings(queue({ queued: 2, oldest_open_at: hoursAgo(1) }), true, NOW), []);
+  });
+
+  it("des contrôles abandonnés : avec la dernière erreur", () => {
+    const warnings = scanQueueWarnings(queue({ failed: 2, last_failure: { message: "ffmpeg failed (killed by SIGKILL)", at: hoursAgo(3) } }), true, NOW);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0].text, /2 automatic checks gave up.*SIGKILL/);
+    assert.match(scanQueueWarnings(queue({ failed: 1 }), true, NOW)[0].text, /^1 automatic check gave up/);
+  });
+
+  it("une file qui n'avance pas : alerte au bout de deux heures", () => {
+    assert.deepEqual(scanQueueWarnings(queue({ queued: 3, oldest_open_at: hoursAgo(SCAN_STALE_HOURS) }), true, NOW), []);
+    const stuck = scanQueueWarnings(queue({ queued: 3, running: 1, oldest_open_at: hoursAgo(SCAN_STALE_HOURS + 3) }), true, NOW);
+    assert.equal(stuck.length, 1);
+    assert.match(stuck[0].text, /4 tracks waiting, the oldest for 5 hours/);
+  });
+
+  it("l'empreinte qui n'a pas pu répondre : le message d'ACRCloud est repris", () => {
+    const problem = queue({ fingerprint_unavailable_7d: 3, last_fingerprint_problem: { message: "ACRCloud code 3014: invalid signature (wrong access secret?)", at: hoursAgo(1) } });
+    const warnings = scanQueueWarnings(problem, true, NOW);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0].text, /could not run 3 times in the last 7 days\. Last problem: ACRCloud code 3014/);
+  });
+
+  it("empreinte non activée : ses anciens ratés ne sont pas relevés", () => {
+    assert.deepEqual(scanQueueWarnings(queue({ fingerprint_unavailable_7d: 3 }), false, NOW), []);
+  });
+
+  it("intégré au rapport complet de la page System", () => {
+    const warnings = systemWarnings({ config: null, jobs: goodJobs, schema: null, scanQueue: null, now: NOW });
+    assert.equal(warnings.some((w) => /scan_jobs/.test(w.text)), true);
   });
 });
 

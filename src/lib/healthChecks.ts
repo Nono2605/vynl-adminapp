@@ -1,5 +1,6 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import type { ScanQueueStatus } from "@/lib/systemReport";
 
 // Contrôles de santé partagés par GET /api/health (public, booleans seulement) et la page « System » (réservée aux
 // admins). Aucune valeur, aucun message d'erreur : seulement « présent » ou « absent ».
@@ -146,4 +147,45 @@ export async function collectionChecks(): Promise<Record<string, boolean>> {
     seen("source_context"),
   ]);
   return { plays_with_country: country, plays_with_device: device, plays_with_ip_hash: ipHash, plays_with_source: source };
+}
+
+// L'état de la file des contrôles automatiques et le dernier raté du contrôle d'empreinte (lecture seule). `null` : la table
+// scan_jobs n'existe pas (migration pas appliquée). Les messages d'erreur viennent du journal (jamais une clé : l'API les
+// écrit sans secret) et sont coupés à 200 caractères.
+export async function scanQueueStatus(): Promise<ScanQueueStatus | null> {
+  const db = supabaseAdmin();
+  const head = { count: "exact", head: true } as const;
+  const since7d = new Date(Date.now() - 7 * 86_400_000).toISOString();
+
+  const [queued, running, done, failed, oldest, lastFailed, unavailable] = await Promise.all([
+    db.from("scan_jobs").select("id", head).eq("status", "queued"),
+    db.from("scan_jobs").select("id", head).eq("status", "running"),
+    db.from("scan_jobs").select("id", head).eq("status", "done"),
+    db.from("scan_jobs").select("id", head).eq("status", "failed"),
+    db.from("scan_jobs").select("created_at").in("status", ["queued", "running"]).order("created_at", { ascending: true }).limit(1),
+    db.from("scan_jobs").select("last_error, updated_at").eq("status", "failed").order("updated_at", { ascending: false }).limit(1),
+    db
+      .from("track_scans")
+      .select("created_at, detail", { count: "exact" })
+      .eq("provider", "acrcloud")
+      .eq("detail->>unavailable", "true")
+      .gte("created_at", since7d)
+      .order("created_at", { ascending: false })
+      .limit(1),
+  ]);
+  if (queued.error) return null;
+
+  const problem = unavailable.data?.[0] as { created_at: string; detail: { message?: unknown } | null } | undefined;
+  const failure = lastFailed.data?.[0] as { last_error: string | null; updated_at: string } | undefined;
+  const clip = (value: unknown) => (typeof value === "string" && value ? value.slice(0, 200) : null);
+  return {
+    queued: queued.count ?? 0,
+    running: running.count ?? 0,
+    done: done.count ?? 0,
+    failed: failed.count ?? 0,
+    oldest_open_at: (oldest.data?.[0] as { created_at: string } | undefined)?.created_at ?? null,
+    last_failure: failure ? { message: clip(failure.last_error), at: failure.updated_at } : null,
+    fingerprint_unavailable_7d: unavailable.error ? 0 : (unavailable.count ?? 0),
+    last_fingerprint_problem: problem ? { message: clip(problem.detail?.message), at: problem.created_at } : null,
+  };
 }

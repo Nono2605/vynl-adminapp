@@ -80,6 +80,24 @@ export function hoursSince(iso: string | null, now: Date): number | null {
   return Number.isNaN(then) ? null : (now.getTime() - then) / 3_600_000;
 }
 
+// L'état de la file des contrôles automatiques (table scan_jobs, migration 20261026000000) et de leurs ratés récents.
+export interface ScanQueueStatus {
+  queued: number;
+  running: number;
+  done: number;
+  failed: number;
+  oldest_open_at: string | null;
+  last_failure: { message: string | null; at: string } | null;
+  // Contrôles d'empreinte (ACRCloud) qui n'ont pas pu répondre pendant les 7 derniers jours.
+  fingerprint_unavailable_7d: number;
+  last_fingerprint_problem: { message: string | null; at: string } | null;
+}
+
+export const SCANS_MIGRATION = "20261026000000_scan_jobs.sql";
+
+// Une tâche de contrôle en attente depuis plus longtemps que ça : l'API ne les traite pas (endormie, ou migration absente).
+export const SCAN_STALE_HOURS = 2;
+
 export interface SystemInput {
   // null : l'API n'a pas répondu (ou pas encore la route).
   config: ApiConfig | null;
@@ -88,6 +106,8 @@ export interface SystemInput {
   schema: Record<string, boolean> | null;
   // undefined : pas demandé. null : la fonction admin_transcode_status() n'existe pas (migration pas appliquée).
   transcode?: TranscodeStatus | null;
+  // undefined : pas demandé. null : la table scan_jobs n'existe pas (migration pas appliquée).
+  scanQueue?: ScanQueueStatus | null;
   now: Date;
 }
 
@@ -121,7 +141,37 @@ export function fingerprintWarnings(fingerprint: ApiConfig["fingerprint"]): Warn
   return [];
 }
 
-export function systemWarnings({ config, jobs, schema, transcode, now }: SystemInput): Warning[] {
+// La file des contrôles automatiques : migration absente (rien ne tourne), tâches abandonnées, file qui n'avance pas, et le
+// dernier raté du contrôle d'empreinte (le message dit pourquoi : clé fausse, limite atteinte, ffmpeg arrêté…).
+export function scanQueueWarnings(queue: ScanQueueStatus | null | undefined, fingerprintActive: boolean, now: Date): Warning[] {
+  if (queue === undefined) return [];
+  if (queue === null) {
+    return [{ level: "warn", text: `The automatic checks cannot run: apply ${SCANS_MIGRATION} (API repository) in the Supabase SQL editor.` }];
+  }
+  const out: Warning[] = [];
+  if (queue.failed > 0) {
+    const why = queue.last_failure?.message ? ` Last error: ${queue.last_failure.message}` : "";
+    out.push({ level: "warn", text: `${queue.failed} automatic check${queue.failed === 1 ? "" : "s"} gave up after several attempts.${why}` });
+  }
+  const waiting = queue.queued + queue.running;
+  const age = hoursSince(queue.oldest_open_at, now);
+  if (waiting > 0 && age !== null && age > SCAN_STALE_HOURS) {
+    out.push({
+      level: "warn",
+      text: `The automatic checks are not moving: ${waiting} track${waiting === 1 ? "" : "s"} waiting, the oldest for ${Math.round(age)} hours. The API may be asleep or restarting.`,
+    });
+  }
+  if (fingerprintActive && queue.fingerprint_unavailable_7d > 0) {
+    const why = queue.last_fingerprint_problem?.message ? ` Last problem: ${queue.last_fingerprint_problem.message}` : "";
+    out.push({
+      level: "warn",
+      text: `The audio fingerprint check could not run ${queue.fingerprint_unavailable_7d} time${queue.fingerprint_unavailable_7d === 1 ? "" : "s"} in the last 7 days.${why}`,
+    });
+  }
+  return out;
+}
+
+export function systemWarnings({ config, jobs, schema, transcode, scanQueue, now }: SystemInput): Warning[] {
   const out: Warning[] = [];
 
   if (config) {
@@ -218,6 +268,8 @@ export function systemWarnings({ config, jobs, schema, transcode, now }: SystemI
       });
     }
   }
+
+  out.push(...scanQueueWarnings(scanQueue, Boolean(config?.fingerprint?.active), now));
 
   if (schema) {
     const missing = Object.entries(schema)

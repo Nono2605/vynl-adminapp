@@ -3,10 +3,10 @@ import { PageHead } from "@/components/PageHead";
 import { StatusBadge } from "@/components/StatusBadge";
 import { apiGet } from "@/lib/apiClient";
 import { formatDateTime } from "@/lib/format";
-import { collectionChecks, schemaChecks } from "@/lib/healthChecks";
+import { collectionChecks, scanQueueStatus, schemaChecks } from "@/lib/healthChecks";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { EXPECTED_JOBS, systemWarnings, type ApiConfig, type ScheduledJob, type TranscodeStatus } from "@/lib/systemReport";
+import { EXPECTED_JOBS, SCANS_MIGRATION, systemWarnings, type ApiConfig, type ScheduledJob, type TranscodeStatus } from "@/lib/systemReport";
 
 // « Réglé » ou « manquant » : jamais la valeur d'un secret (l'API ne la donne pas).
 function Flag({ on, onLabel = "set", offLabel = "missing" }: { on: boolean; onLabel?: string; offLabel?: string }) {
@@ -22,12 +22,13 @@ function uptime(seconds: number): string {
 export default async function SystemPage() {
   await requireAdmin();
 
-  const [config, jobsResult, transcodeResult, schema, collection] = await Promise.all([
+  const [config, jobsResult, transcodeResult, schema, collection, scanQueue] = await Promise.all([
     apiGet<ApiConfig>("/admin/config"),
     supabaseAdmin().rpc("admin_scheduled_jobs"),
     supabaseAdmin().rpc("admin_transcode_status"),
     schemaChecks().catch(() => null),
     collectionChecks().catch(() => null),
+    scanQueueStatus().catch(() => undefined),
   ]);
 
   const apiConfig = config.ok ? config.data : null;
@@ -36,7 +37,7 @@ export default async function SystemPage() {
   const transcode = transcodeResult.error
     ? null
     : ((Array.isArray(transcodeResult.data) ? transcodeResult.data[0] : transcodeResult.data) as TranscodeStatus | undefined) ?? null;
-  const warnings = systemWarnings({ config: apiConfig, jobs, schema, transcode, now: new Date() });
+  const warnings = systemWarnings({ config: apiConfig, jobs, schema, transcode, scanQueue, now: new Date() });
   const problems = warnings.filter((warning) => warning.level === "warn");
   const notes = warnings.filter((warning) => warning.level === "info");
 
@@ -252,6 +253,46 @@ export default async function SystemPage() {
         </div>
       ) : (
         <p className="muted">Not available (the API does not report it yet).</p>
+      )}
+
+      <h2 className="section-title section-gap">Automatic checks</h2>
+      {scanQueue === undefined ? (
+        <p className="muted">The queue could not be read.</p>
+      ) : scanQueue === null ? (
+        <p className="muted">The queue does not exist yet: apply {SCANS_MIGRATION} (API repository). Until then no automatic check runs.</p>
+      ) : (
+        <div className="dash-card">
+          <dl className="kv">
+            <dt>Queue</dt>
+            <dd>
+              {scanQueue.queued} waiting, {scanQueue.running} running, {scanQueue.done} done, {scanQueue.failed} gave up
+            </dd>
+            <dt>Oldest track waiting since</dt>
+            <dd>{scanQueue.oldest_open_at ? formatDateTime(scanQueue.oldest_open_at) : <span className="muted">nothing waiting</span>}</dd>
+            <dt>Last check that gave up</dt>
+            <dd>
+              {scanQueue.last_failure ? (
+                <>
+                  {formatDateTime(scanQueue.last_failure.at)} <span className="muted">{scanQueue.last_failure.message ?? ""}</span>
+                </>
+              ) : (
+                <span className="muted">none</span>
+              )}
+            </dd>
+            <dt>Fingerprint could not run (7 days)</dt>
+            <dd>
+              {scanQueue.fingerprint_unavailable_7d}
+              {scanQueue.last_fingerprint_problem && (
+                <>
+                  {" "}
+                  <span className="muted">
+                    last: {formatDateTime(scanQueue.last_fingerprint_problem.at)} {scanQueue.last_fingerprint_problem.message ?? ""}
+                  </span>
+                </>
+              )}
+            </dd>
+          </dl>
+        </div>
       )}
 
       <h2 className="section-title section-gap">Scheduled jobs</h2>
