@@ -2,6 +2,7 @@ import "server-only";
 import { ActionError } from "@/lib/actions";
 import { loadTrackGenres } from "@/lib/genres";
 import { blockers, declarationState, sumSplits, trackChecks, type Check } from "@/lib/moderation";
+import { loadScanSummaries } from "@/lib/scanSummaries";
 import { loadSimilarTracks, type SimilarDb } from "@/lib/similarTracks";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -47,6 +48,8 @@ export async function loadTrackChecks(trackId: string): Promise<{ track: TrackFo
     duration_seconds: track.data.duration_seconds,
     artist_id: track.data.artist_id,
   });
+  // Contrôles automatiques : relus ici aussi, jamais crus sur la foi de la page (ils ont pu finir, ou changer, depuis).
+  const scanSummaries = await loadScanSummaries(db, [trackId]);
   const checks = trackChecks({
     durationSeconds: track.data.duration_seconds,
     fileCount: files.count ?? 0,
@@ -54,6 +57,7 @@ export async function loadTrackChecks(trackId: string): Promise<{ track: TrackFo
     genre: genres ? (genres.get(trackId) ?? null) : undefined,
     splitsTotal: sumSplits(splits.data as { percentage: number | string }[] | null),
     similarTitleCount: similar?.length,
+    scans: scanSummaries?.get(trackId),
   });
 
   return { track: track.data as TrackForReview, checks, blocking: blockers(checks) };

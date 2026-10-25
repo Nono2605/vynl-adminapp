@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { reviewDeclaration, reviewTrack } from "@/app/actions/moderation";
+import { runTrackScans } from "@/app/actions/scans";
 import { ActionForm } from "@/components/ActionForm";
 import { AuditTrail } from "@/components/AuditTrail";
 import { Notice } from "@/components/Notice";
@@ -16,6 +17,7 @@ import { first, isUuid, pick, type SearchParams } from "@/lib/query";
 import { loadQueue, skipPath } from "@/lib/reviewQueue";
 import { positionOf } from "@/lib/reviewQueueLogic";
 import { SCAN_COLUMNS, isMissingTable, type ScanRow } from "@/lib/scans";
+import { loadScanSummaries } from "@/lib/scanSummaries";
 import { loadSimilarTracks, type SimilarDb } from "@/lib/similarTracks";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -167,6 +169,7 @@ export default async function TrackReviewPage({
         artist_id: artist.id,
       })
     : null;
+  const scanSummaries = await loadScanSummaries(db, [id]);
   const checks = trackChecks({
     durationSeconds: row.duration_seconds,
     fileCount: fileRows.length,
@@ -174,6 +177,7 @@ export default async function TrackReviewPage({
     genre: genres ? genreCode : undefined,
     splitsTotal: sumSplits(splitRows),
     similarTitleCount: similar?.length,
+    scans: scanSummaries?.get(id),
   });
   const blocking = blockers(checks);
   const splitsTotal = sumSplits(splitRows);
@@ -332,9 +336,11 @@ export default async function TrackReviewPage({
               </li>
             ))}
             <li>
-              <span className="checklist__label">Copyright scan</span>
+              <span className="checklist__label">Audio fingerprint</span>
               <span className="status status--soon">Coming</span>
-              <span className="checklist__detail">Audio fingerprinting against known catalogs will appear here.</span>
+              <span className="checklist__detail">
+                Matching against known recordings will appear here once a provider is connected. Until then, listen to the track.
+              </span>
             </li>
           </ul>
           <p className="muted" style={{ marginTop: "var(--space-sm)" }}>
@@ -611,7 +617,13 @@ export default async function TrackReviewPage({
         <h2 className="section-title">Content checks</h2>
         <p className="muted" style={{ marginBottom: "var(--space-sm)" }}>
           Every automatic check on this track is kept here as proof of diligence. A refused upload leaves a line too.
+          The checks start by themselves when the creator submits the track.
         </p>
+        <div style={{ marginBottom: "var(--space-sm)" }}>
+          <ActionForm action={runTrackScans} submitLabel="Run the checks" pendingLabel="Starting…" tone="secondary">
+            <input type="hidden" name="trackId" value={row.id} />
+          </ActionForm>
+        </div>
         {scansError && <Notice>Could not load the checks: {scansError}</Notice>}
         {scansMissing ? (
           <p className="muted">The check log is not set up yet: apply the latest migration of the API repository.</p>

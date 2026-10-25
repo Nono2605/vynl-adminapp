@@ -2,6 +2,7 @@
 
 import { ActionError, actionResult, ensure, formReason, formText, formUuid, runAudited } from "@/lib/actions";
 import type { ActionState } from "@/lib/actionTypes";
+import { apiPost } from "@/lib/apiClient";
 import { describeScan, isMissingTable } from "@/lib/scans";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -63,5 +64,33 @@ export async function decideScan(_state: ActionState | undefined, formData: Form
         return { message: verdict === "confirmed" ? "Marked as a real problem." : "Dismissed as a false alarm." };
       }
     );
+  });
+}
+
+// Relance les contrôles automatiques d'UN morceau. C'est l'API qui les exécute (elle seule lit les fichiers et écrit le
+// journal) ; l'admin la sollicite avec son jeton. Sans effet s'ils sont déjà en cours. Ne change rien au catalogue : pas
+// d'entrée dans le journal d'audit (les résultats, eux, sont gardés dans le journal des contrôles).
+export async function runTrackScans(_state: ActionState | undefined, formData: FormData): Promise<ActionState> {
+  return actionResult(async () => {
+    await requireAdmin();
+    const trackId = formUuid(formData, "trackId");
+    const result = await apiPost<{ queued: boolean }>(`/admin/tracks/${trackId}/scan`);
+    if (!result.ok) throw new ActionError(result.error);
+    return {
+      ok: true,
+      message: result.data.queued
+        ? "Checks started. They take a few seconds: reload the page to see the result."
+        : "Checks are already waiting or running for this track. Reload the page in a moment.",
+    };
+  });
+}
+
+// Réveille l'exécuteur des contrôles : l'API tourne sur une offre qui s'endort, des contrôles ont pu rester en file.
+export async function runPendingScans(): Promise<ActionState> {
+  return actionResult(async () => {
+    await requireAdmin();
+    const result = await apiPost<{ started: boolean }>("/admin/scans/run");
+    if (!result.ok) throw new ActionError(result.error);
+    return { ok: true, message: "Checks resumed. Reload the page in a moment." };
   });
 }

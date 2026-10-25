@@ -33,6 +33,13 @@ export function isMissingTable(error: { code?: string } | null | undefined): boo
 // l'empreinte acoustique) reste affichée telle quelle plutôt que d'être cachée.
 export function describeScan(scan: Pick<ScanRow, "check_kind" | "score" | "detail">): { title: string; text: string } {
   const detail = scan.detail ?? {};
+  // Un contrôle qui n'a pas pu répondre (panne, prestataire injoignable) : jamais présenté comme « rien à signaler ».
+  if (detail.unavailable === true) {
+    return {
+      title: `${scan.check_kind.replace(/_/g, " ")}: could not run`,
+      text: "The check did not answer. Run the checks again, or review this track by hand.",
+    };
+  }
   switch (scan.check_kind) {
     case "file_hash":
       return {
@@ -43,6 +50,21 @@ export function describeScan(scan: Pick<ScanRow, "check_kind" | "score" | "detai
       return {
         title: "File on the block list",
         text: "The upload was refused: this exact file was removed after a rights holder claim (Claims page).",
+      };
+    case "duplicate_audio":
+      return {
+        title: "Same audio file as another artist's track",
+        text: "The file is identical, byte for byte, to a file of another artist already on Vynl. Likely a copy.",
+      };
+    case "blocked_audio":
+      return {
+        title: "File on the block list",
+        text: "This exact file was removed after a rights holder claim (Claims page).",
+      };
+    case "similar_title":
+      return {
+        title: "Same title and length as another artist's track",
+        text: "Another artist has a track with the same title and almost the same length. Listen to both: deciding whether it is a copy is up to you.",
       };
     case "name_similarity": {
       const name = typeof detail.matched_name === "string" ? detail.matched_name : "another artist";

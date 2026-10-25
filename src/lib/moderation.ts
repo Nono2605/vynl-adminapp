@@ -3,9 +3,11 @@
 // vérification faite côté serveur avant de publier. Un bouton grisé n'est
 // jamais la seule barrière.
 //
-// Le futur scan audio (détection de plagiat / droits d'auteur) s'ajoutera ici
-// comme un contrôle de plus, avec le même état « ok / warn / fail » : un « fail »
-// bloque la publication.
+// Les contrôles automatiques (doublons de fichier, liste de blocage, titre déjà pris ; plus tard
+// la reconnaissance acoustique) arrivent ici sous la forme d'UN contrôle, « scans », résumé par
+// lib/scanSummary.ts, avec le même état « ok / warn / fail » : un « fail » bloque la publication.
+
+import type { ScanSummary } from "@/lib/scanSummary";
 
 // Provenances acceptées pendant la bêta (décision du 12 oct. 2026) : la plateforme est 100 % IA.
 // Un morceau déclaré « hybrid » est ENREGISTRÉ mais en attente (« held ») : il ne se publie pas
@@ -22,7 +24,7 @@ export type DeclarationState = "none" | "ai" | "held" | "rejected";
 export type CheckState = "ok" | "warn" | "fail";
 
 export interface Check {
-  key: "audio" | "duration" | "declaration" | "genre" | "splits" | "similar_title";
+  key: "audio" | "duration" | "declaration" | "genre" | "splits" | "similar_title" | "scans";
   label: string;
   state: CheckState;
   detail: string;
@@ -38,6 +40,9 @@ export interface TrackCheckInput {
   splitsTotal: number | null;
   // Morceaux d'AUTRES artistes de même titre et de durée voisine (spec 15.5, D4). undefined = pas cherché : pas de contrôle.
   similarTitleCount?: number;
+  // Résumé des contrôles automatiques (lib/scanSummary.ts). undefined = on n'a pas pu le lire (migration de la file des
+  // contrôles pas encore appliquée) : pas de contrôle.
+  scans?: ScanSummary;
 }
 
 // Une déclaration écartée par un administrateur (« rejected ») l'emporte ; sinon la provenance
@@ -112,6 +117,8 @@ export function trackChecks(input: TrackCheckInput): Check[] {
     );
   }
 
+  if (input.scans) checks.push(scansCheck(input.scans));
+
   if (input.splitsTotal === null) {
     checks.push({ key: "splits", label: "Revenue splits", state: "ok", detail: "None defined" });
   } else if (Math.abs(input.splitsTotal - 100) < 0.001) {
@@ -126,6 +133,49 @@ export function trackChecks(input: TrackCheckInput): Check[] {
   }
 
   return checks;
+}
+
+// Les contrôles automatiques, en une ligne. « En cours » BLOQUE (il serait trompeur de publier avant le résultat) ;
+// une alerte grave non tranchée bloque aussi, jusqu'à ce que l'administrateur la confirme ou l'écarte ; un contrôle
+// qui n'a pas pu répondre ne bloque pas (une panne de prestataire ne doit pas figer la file) mais se voit.
+export function scansCheck(scans: ScanSummary): Check {
+  const label = "Automatic checks";
+  const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`;
+
+  switch (scans.state) {
+    case "pending":
+      return { key: "scans", label, state: "fail", detail: "Running now: wait a moment, then reload the page" };
+    case "none":
+      return { key: "scans", label, state: "warn", detail: "Not run yet: use “Run the checks” in Content checks below" };
+    case "unavailable":
+      return {
+        key: "scans",
+        label,
+        state: "warn",
+        detail: "The last run did not finish: run the checks again, or review this track by hand",
+      };
+    case "done":
+      break;
+  }
+
+  if (scans.confirmed > 0) {
+    return { key: "scans", label, state: "fail", detail: "A problem was confirmed on this track: refuse or archive it" };
+  }
+  if (scans.failing > 0) {
+    return {
+      key: "scans",
+      label,
+      state: "fail",
+      detail: `${plural(scans.failing, "serious alert")} to settle in Content checks below: confirm or dismiss ${scans.failing > 1 ? "each" : "it"}`,
+    };
+  }
+  if (scans.unavailable > 0) {
+    return { key: "scans", label, state: "warn", detail: `${plural(scans.unavailable, "check")} could not answer: run them again, or review by hand` };
+  }
+  if (scans.warning > 0) {
+    return { key: "scans", label, state: "warn", detail: `${plural(scans.warning, "alert")} to look at in Content checks below` };
+  }
+  return { key: "scans", label, state: "ok", detail: `${plural(scans.checks, "check")} run, nothing to report` };
 }
 
 export function blockers(checks: Check[]): Check[] {

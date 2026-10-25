@@ -56,3 +56,27 @@ describe("isMissingTable", () => {
     assert.equal(isMissingTable(null), false);
   });
 });
+
+describe("describeScan : les contrôles automatiques de l'envoi en relecture", () => {
+  it("même fichier chez un autre artiste", () => {
+    const described = describeScan({ check_kind: "duplicate_audio", score: null, detail: {} });
+    assert.equal(described.title, "Same audio file as another artist's track");
+    assert.match(described.text, /identical, byte for byte/);
+  });
+
+  it("fichier de la liste de blocage, trouvé à la relecture", () => {
+    assert.equal(describeScan({ check_kind: "blocked_audio", score: null, detail: {} }).title, "File on the block list");
+  });
+
+  it("même titre et même durée : laisse la décision à l'administrateur", () => {
+    const described = describeScan({ check_kind: "similar_title", score: null, detail: { found: 2 } });
+    assert.equal(described.title, "Same title and length as another artist's track");
+    assert.match(described.text, /up to you/);
+  });
+
+  it("un contrôle qui n'a pas pu répondre n'est jamais présenté comme « rien à signaler »", () => {
+    const described = describeScan({ check_kind: "fingerprint", score: null, detail: { unavailable: true } });
+    assert.equal(described.title, "fingerprint: could not run");
+    assert.match(described.text, /did not answer/);
+  });
+});

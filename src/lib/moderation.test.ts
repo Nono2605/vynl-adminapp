@@ -4,6 +4,7 @@ import {
   ACCEPTED_PROVENANCES,
   blockers,
   declarationState,
+  scansCheck,
   sumSplits,
   trackChecks,
   type TrackCheckInput,
@@ -125,5 +126,55 @@ describe("morceau similaire d'un autre artiste (spec 15.5, D4)", () => {
 
   it("un avertissement ne bloque JAMAIS la publication : la relecture humaine tranche", () => {
     assert.deepEqual(blocking({ similarTitleCount: 5 }), []);
+  });
+});
+
+describe("contrôles automatiques : un seul contrôle « scans » qui résume le journal", () => {
+  const done = { state: "done" as const, failing: 0, confirmed: 0, warning: 0, unavailable: 0, checks: 3 };
+  const scans = (overrides: Partial<typeof done>) => ({ ...done, ...overrides });
+  const scansLine = (summary: Parameters<typeof scansCheck>[0]) => scansCheck(summary);
+
+  it("sans résumé (migration de la file pas appliquée), aucun contrôle n'est ajouté", () => {
+    assert.equal(trackChecks({ ...ready }).find((c) => c.key === "scans"), undefined);
+    assert.deepEqual(blocking({}), []);
+  });
+
+  it("rien à signaler : ok, et la publication n'est pas bloquée", () => {
+    const check = scansLine(done);
+    assert.equal(check.state, "ok");
+    assert.match(check.detail, /3 checks run/);
+    assert.deepEqual(blocking({ scans: done }), []);
+  });
+
+  it("en cours : BLOQUE la publication (on ne publie pas avant le résultat)", () => {
+    assert.deepEqual(blocking({ scans: { ...done, state: "pending", checks: 0 } }), ["scans"]);
+  });
+
+  it("une alerte grave non tranchée bloque ; une fois écartée (failing = 0), elle ne bloque plus", () => {
+    assert.deepEqual(blocking({ scans: scans({ failing: 1 }) }), ["scans"]);
+    assert.match(scansLine(scans({ failing: 2 })).detail, /2 serious alerts to settle/);
+    assert.deepEqual(blocking({ scans: scans({ failing: 0 }) }), []);
+  });
+
+  it("un problème confirmé bloque et dit de refuser", () => {
+    const check = scansLine(scans({ failing: 1, confirmed: 1 }));
+    assert.equal(check.state, "fail");
+    assert.match(check.detail, /refuse or archive/);
+  });
+
+  it("un avertissement, un contrôle sans réponse, jamais lancé ou tombé en panne : visibles, mais ne bloquent pas", () => {
+    for (const summary of [
+      scans({ warning: 1 }),
+      scans({ unavailable: 1 }),
+      { ...done, state: "none" as const, checks: 0 },
+      { ...done, state: "unavailable" as const, checks: 0 },
+    ]) {
+      assert.equal(scansLine(summary).state, "warn");
+      assert.deepEqual(blocking({ scans: summary }), []);
+    }
+  });
+
+  it("une alerte grave l'emporte sur un avertissement dans le message", () => {
+    assert.equal(scansLine(scans({ failing: 1, warning: 3 })).state, "fail");
   });
 });

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { runPendingScans } from "@/app/actions/scans";
+import { ActionForm } from "@/components/ActionForm";
 import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
 import { LastDecision } from "@/components/ReviewFlow";
@@ -9,6 +11,7 @@ import { loadTrackGenres } from "@/lib/genres";
 import { declarationState, sumSplits, trackChecks } from "@/lib/moderation";
 import { embeddedCount, first, oneOf, pick, type SearchParams } from "@/lib/query";
 import { QUEUE_KINDS, QUEUE_LABEL, reviewPath, skipPath } from "@/lib/reviewQueue";
+import { loadScanSummaries } from "@/lib/scanSummaries";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -82,6 +85,9 @@ export default async function ModerationPage({ searchParams }: { searchParams: P
   const trackRows = (tracks.data ?? []) as unknown as QueuedTrack[];
   // Genre de chaque morceau de la file : lecture à part, tolérante tant que la migration des genres manque.
   const trackGenres = await loadTrackGenres(db, trackRows.map((track) => track.id));
+  // Contrôles automatiques de chaque morceau de la file (absents tant que la migration de la file n'est pas appliquée).
+  const scanSummaries = await loadScanSummaries(db, trackRows.map((track) => track.id));
+  const scansWaiting = scanSummaries ? [...scanSummaries.values()].some((s) => s.state === "none" || s.state === "pending") : false;
   const albumRows = (albums.data ?? []) as unknown as QueuedAlbum[];
   const decisionRows = (decisions.data ?? []) as unknown as Decision[];
 
@@ -121,6 +127,12 @@ export default async function ModerationPage({ searchParams }: { searchParams: P
         Oldest first. “Review one by one” opens the oldest track and moves on to the next as soon as you publish or refuse
         one. You can also open a single track from the list.
       </p>
+      {scansWaiting && (
+        <div style={{ marginBottom: "var(--space-sm)" }}>
+          <ActionForm action={runPendingScans} submitLabel="Run the waiting checks" pendingLabel="Starting…" tone="secondary" />
+          <p className="muted">Some tracks have no automatic check result yet. The API may have been asleep: this wakes it up.</p>
+        </div>
+      )}
       <div className="table-wrap">
         <table className="table">
           <thead>
@@ -149,6 +161,7 @@ export default async function ModerationPage({ searchParams }: { searchParams: P
                 declaration: declarationState(latest),
                 genre: trackGenres ? (trackGenres.get(track.id) ?? null) : undefined,
                 splitsTotal: sumSplits(track.splits),
+                scans: scanSummaries?.get(track.id),
               });
               const problems = checks.filter((check) => check.state !== "ok");
               return (
