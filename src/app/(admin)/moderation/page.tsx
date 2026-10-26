@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { runPendingScans } from "@/app/actions/scans";
+import { queueReviewScans, runPendingScans } from "@/app/actions/scans";
 import { ActionForm } from "@/components/ActionForm";
 import { Notice } from "@/components/Notice";
 import { PageHead } from "@/components/PageHead";
@@ -127,10 +127,18 @@ export default async function ModerationPage({ searchParams }: { searchParams: P
         Oldest first. “Review one by one” opens the oldest track and moves on to the next as soon as you publish or refuse
         one. You can also open a single track from the list.
       </p>
-      {scansWaiting && (
-        <div style={{ marginBottom: "var(--space-sm)" }}>
-          <ActionForm action={runPendingScans} submitLabel="Run the waiting checks" pendingLabel="Starting…" tone="secondary" />
-          <p className="muted">Some tracks have no automatic check result yet. The API may have been asleep: this wakes it up.</p>
+      {trackRows.length > 0 && (
+        <div style={{ marginBottom: "var(--space-sm)", display: "flex", flexWrap: "wrap", gap: "var(--space-md)" }}>
+          <div>
+            <ActionForm action={queueReviewScans} submitLabel="Check every track in review" pendingLabel="Queuing…" tone="secondary" />
+            <p className="muted">Queues the automatic checks of all the tracks below, including those that were never queued.</p>
+          </div>
+          {scansWaiting && (
+            <div>
+              <ActionForm action={runPendingScans} submitLabel="Run the waiting checks" pendingLabel="Starting…" tone="secondary" />
+              <p className="muted">Wakes the API for checks already queued. It does not queue a track that never was.</p>
+            </div>
+          )}
         </div>
       )}
       <div className="table-wrap">

@@ -3,6 +3,7 @@
 import { ActionError, actionResult, ensure, formReason, formText, formUuid, runAudited } from "@/lib/actions";
 import type { ActionState } from "@/lib/actionTypes";
 import { apiPost } from "@/lib/apiClient";
+import { queueReviewMessage, runPendingMessage, trackScanMessage } from "@/lib/scanMessages";
 import { describeScan, isMissingTable } from "@/lib/scans";
 import { requireAdmin } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -74,14 +75,9 @@ export async function runTrackScans(_state: ActionState | undefined, formData: F
   return actionResult(async () => {
     await requireAdmin();
     const trackId = formUuid(formData, "trackId");
-    const result = await apiPost<{ queued: boolean }>(`/admin/tracks/${trackId}/scan`);
+    const result = await apiPost<{ queued: boolean; reason?: string }>(`/admin/tracks/${trackId}/scan`);
     if (!result.ok) throw new ActionError(result.error);
-    return {
-      ok: true,
-      message: result.data.queued
-        ? "Checks started. They take a few seconds: reload the page to see the result."
-        : "Checks are already waiting or running for this track. Reload the page in a moment.",
-    };
+    return { ok: true, message: trackScanMessage(result.data) };
   });
 }
 
@@ -89,8 +85,19 @@ export async function runTrackScans(_state: ActionState | undefined, formData: F
 export async function runPendingScans(): Promise<ActionState> {
   return actionResult(async () => {
     await requireAdmin();
-    const result = await apiPost<{ started: boolean }>("/admin/scans/run");
+    const result = await apiPost<{ started: boolean; waiting?: number }>("/admin/scans/run");
     if (!result.ok) throw new ActionError(result.error);
-    return { ok: true, message: "Checks resumed. Reload the page in a moment." };
+    return { ok: true, message: runPendingMessage({ started: result.data.started, waiting: result.data.waiting ?? 0 }) };
+  });
+}
+
+// Met en file les contrôles de tous les morceaux en attente de relecture (ceux qui n'ont jamais été mis en file : envoyés avant
+// la file, ou quand la migration manquait). Un fichier déjà contrôlé n'est pas renvoyé à ACRCloud.
+export async function queueReviewScans(): Promise<ActionState> {
+  return actionResult(async () => {
+    await requireAdmin();
+    const result = await apiPost<{ in_review: number; queued: number; already_open: number }>("/admin/scans/queue-review");
+    if (!result.ok) throw new ActionError(result.error);
+    return { ok: true, message: queueReviewMessage(result.data) };
   });
 }
