@@ -4,6 +4,8 @@
 export interface ApiConfig {
   deploy: { commit: string | null; node: string; uptime_seconds: number };
   entitlement_mode: "beta" | "live";
+  // Absent d'une API déployée avant ce réglage : on ne dit rien tant qu'elle ne le donne pas.
+  subscriptions_open?: boolean;
   auth_local_verify: boolean;
   secrets: {
     ip_hash_secret: boolean;
@@ -221,6 +223,14 @@ export function systemWarnings({ config, jobs, schema, transcode, scanQueue, now
       }
     }
     out.push(...fingerprintWarnings(config.fingerprint));
+    if (config.subscriptions_open === true && config.entitlement_mode === "beta") {
+      out.push({
+        level: "warn",
+        text: "Subscriptions are open but listening rights are still beta (ENTITLEMENT_MODE): customers would pay for nothing. Open both together after the beta.",
+      });
+    } else if (config.subscriptions_open === false) {
+      out.push({ level: "info", text: "Subscriptions are closed (beta): the API refuses payments. They open after the beta with SUBSCRIPTIONS_OPEN=yes." });
+    }
     if (config.entitlement_mode === "live") {
       out.push({ level: "info", text: "Listening rights follow subscriptions (ENTITLEMENT_MODE is live): plays are no longer all beta." });
     }

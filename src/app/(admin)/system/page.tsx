@@ -88,6 +88,16 @@ export default async function SystemPage() {
             <dd>
               <StatusBadge status={apiConfig.entitlement_mode === "live" ? "paying" : "free"} /> {apiConfig.entitlement_mode}
             </dd>
+            {apiConfig.subscriptions_open !== undefined && (
+              <>
+                <dt>Subscriptions</dt>
+                <dd>
+                  <span className={`status ${apiConfig.subscriptions_open ? "status--warn" : "status--idle"}`}>
+                    {apiConfig.subscriptions_open ? "open" : "closed (beta)"}
+                  </span>
+                </dd>
+              </>
+            )}
             <dt>Local token check</dt>
             <dd>
               <Flag on={apiConfig.auth_local_verify} onLabel="on" offLabel="off" />

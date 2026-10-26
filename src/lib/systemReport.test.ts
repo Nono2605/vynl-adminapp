@@ -319,5 +319,28 @@ describe("file des contrôles automatiques", () => {
     const warnings = systemWarnings({ config: null, jobs: goodJobs, schema: null, scanQueue: null, now: NOW });
     assert.equal(warnings.some((w) => /scan_jobs/.test(w.text)), true);
   });
+
+  describe("abonnements fermés pendant la bêta", () => {
+    const check = (over: Partial<ApiConfig>) => systemWarnings({ config: { ...goodConfig, ...over }, jobs: goodJobs, schema: null, now: NOW });
+
+    it("fermés : une simple information, pas d'alerte", () => {
+      const warnings = check({ subscriptions_open: false });
+      assert.deepEqual(warnings.map((w) => w.level), ["info"]);
+      assert.match(warnings[0].text, /Subscriptions are closed/);
+    });
+
+    it("ouverts alors que les droits d'écoute sont encore « beta » : alerte (on paierait pour rien)", () => {
+      const warnings = check({ subscriptions_open: true, entitlement_mode: "beta" });
+      assert.equal(warnings.some((w) => w.level === "warn" && /pay for nothing/.test(w.text)), true);
+    });
+
+    it("ouverts avec les droits « live » : rien à dire sur ce point", () => {
+      assert.equal(check({ subscriptions_open: true, entitlement_mode: "live" }).some((w) => /Subscriptions are/.test(w.text)), false);
+    });
+
+    it("API plus ancienne (champ absent) : on ne dit rien", () => {
+      assert.equal(check({}).some((w) => /Subscriptions are/.test(w.text)), false);
+    });
+  });
 });
 
